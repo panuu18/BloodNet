@@ -132,10 +132,28 @@ const createRequest = async (req, res) => {
     if (notifications.length > 0) {
       await Notification.insertMany(notifications);
       
-      notifications.forEach(notification => {
-        const socketId = global.connectedUsers.get(notification.userId.toString());
+      // Broadcast new request to all connected donors and hospitals
+      const allConnectedUsers = Array.from(global.connectedUsers.keys());
+      const connectedDonorsAndHospitals = await User.find({
+        _id: { $in: allConnectedUsers },
+        role: { $in: ['donor', 'hospital'] }
+      });
+      
+      connectedDonorsAndHospitals.forEach(user => {
+        const socketId = global.connectedUsers.get(user._id.toString());
         if (socketId) {
-          global.io.to(socketId).emit('newNotification', notification);
+          // Send the actual request data for real-time updates
+          global.io.to(socketId).emit('newBloodRequest', {
+            request: request,
+            type: 'new_request',
+            timestamp: new Date()
+          });
+          
+          // Also send notification
+          const userNotification = notifications.find(n => n.userId.toString() === user._id.toString());
+          if (userNotification) {
+            global.io.to(socketId).emit('newNotification', userNotification);
+          }
         }
       });
     }

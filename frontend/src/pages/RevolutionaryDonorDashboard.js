@@ -42,7 +42,7 @@ import { HeartIcon as HeartSolidIcon, FireIcon as FireSolidIcon } from '@heroico
 
 const RevolutionaryDonorDashboard = () => {
   const { user } = useAuth();
-  const { notifications, showNotification } = useNotifications();
+  const { notifications, showNotification, newBloodRequest } = useNotifications();
   
   // Fallback notification function if context is not available
   const fallbackNotification = (message, type = 'info') => {
@@ -97,6 +97,27 @@ const RevolutionaryDonorDashboard = () => {
     fetchDashboardData();
     initializeAnimations();
   }, []);
+
+  // Listen for real-time blood requests
+  useEffect(() => {
+    if (newBloodRequest) {
+      console.log('New blood request received in dashboard:', newBloodRequest);
+      
+      // Add the new request to the nearby requests list immediately
+      setNearbyRequests(prev => {
+        // Check if request already exists to avoid duplicates
+        const exists = prev.some(req => req._id === newBloodRequest.request._id);
+        if (!exists) {
+          // Show notification to user
+          notify(`🩸 New blood request! ${newBloodRequest.request.bloodGroup} blood needed for ${newBloodRequest.request.unitsNeeded} units`, 'success');
+          
+          // Return updated list with new request at the top
+          return [newBloodRequest.request, ...prev];
+        }
+        return prev;
+      });
+    }
+  }, [newBloodRequest]);
 
   const initializeAnimations = () => {
     setTimeout(() => setImpactAnimation(true), 500);

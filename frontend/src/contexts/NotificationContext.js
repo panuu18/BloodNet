@@ -12,6 +12,11 @@ const notificationReducer = (state, action) => {
         notifications: [action.payload, ...state.notifications],
         unreadCount: state.unreadCount + 1
       };
+    case 'NEW_BLOOD_REQUEST':
+      return {
+        ...state,
+        newBloodRequest: action.payload
+      };
     case 'SET_NOTIFICATIONS':
       return {
         ...state,
@@ -64,7 +69,8 @@ const initialState = {
   notifications: [],
   unreadCount: 0,
   loading: true,
-  socket: null
+  socket: null,
+  newBloodRequest: null
 };
 
 export const NotificationProvider = ({ children }) => {
@@ -86,6 +92,11 @@ export const NotificationProvider = ({ children }) => {
 
       socket.on('newNotification', (notification) => {
         dispatch({ type: 'ADD_NOTIFICATION', payload: notification });
+      });
+
+      socket.on('newBloodRequest', (data) => {
+        console.log('New blood request received:', data);
+        dispatch({ type: 'NEW_BLOOD_REQUEST', payload: data });
       });
 
       socket.on('requestUpdate', (data) => {

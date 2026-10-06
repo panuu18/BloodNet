@@ -26,13 +26,17 @@ import {
   EnvelopeIcon,
   CalendarIcon,
   MagnifyingGlassIcon,
-  FunnelIcon
+  FunnelIcon,
+  XCircleIcon,
+  UserCircleIcon,
+  CheckCircleIcon,
+  PencilIcon
 } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartSolidIcon } from '@heroicons/react/24/solid';
 
 const ModernHospitalDashboard = () => {
   const { user } = useAuth();
-  const { notifications } = useNotifications();
+  const { notifications, newBloodRequest, showNotification } = useNotifications();
   const [activeSection, setActiveSection] = useState('overview');
   const [inventory, setInventory] = useState([]);
   const [bloodRequests, setBloodRequests] = useState([]);
@@ -81,7 +85,28 @@ const ModernHospitalDashboard = () => {
         emergencyContact: user.emergencyContact || ''
       });
     }
-  }, []);
+  }, [user]);
+
+  // Listen for real-time blood requests
+  useEffect(() => {
+    if (newBloodRequest) {
+      console.log('New blood request received in hospital dashboard:', newBloodRequest);
+      
+      // Add the new request to the blood requests list immediately
+      setBloodRequests(prev => {
+        // Check if request already exists to avoid duplicates
+        const exists = prev.some(req => req._id === newBloodRequest.request._id);
+        if (!exists) {
+          // Show notification to hospital staff
+          showNotification(`🩸 New blood request! ${newBloodRequest.request.bloodGroup} blood needed for ${newBloodRequest.request.unitsNeeded} units`, 'success');
+          
+          // Return updated list with new request at the top
+          return [newBloodRequest.request, ...prev];
+        }
+        return prev;
+      });
+    }
+  }, [newBloodRequest]);
 
   const fetchDashboardData = async () => {
     try {
@@ -240,11 +265,7 @@ const ModernHospitalDashboard = () => {
     }
   };
 
-  const showNotification = (message, type) => {
-    // This would integrate with the notification context
-    console.log(`${type}: ${message}`);
-  };
-
+  
   const getStockStatusColor = (units, minThreshold, maxCapacity) => {
     if (units === 0) return { bg: 'bg-red-100', text: 'text-red-600', border: 'border-red-200' };
     if (units <= minThreshold) return { bg: 'bg-orange-100', text: 'text-orange-600', border: 'border-orange-200' };

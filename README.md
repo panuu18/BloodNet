@@ -13,20 +13,30 @@ A comprehensive, production-ready web application that connects blood donors, re
 - **Live Notifications**: Instant updates via Socket.IO
 - **Real-Time Request Updates**: See request status changes instantly
 - **Location-Based Matching**: Find nearby donors and hospitals
+- **Real-Time Inventory Updates**: Live blood stock tracking
 
 ### 🎨 Modern UI/UX
 - **Responsive Design**: Works perfectly on mobile and desktop
 - **Beautiful Animations**: Smooth transitions with Framer Motion
 - **Modern Medical Theme**: Clean, professional interface
 - **Accessibility**: WCAG compliant design
+- **Collapsible Sections**: Card-like buttons for better organization
 
 ### 🔐 Security & Performance
 - **JWT Authentication**: Secure token-based auth system
 - **Role-Based Access**: Proper authorization for each user type
 - **Input Validation**: Comprehensive form validation
 - **Password Hashing**: Secure password storage with bcrypt
+- **CORS Protection**: Cross-origin resource sharing security
 
-## 🛠️ Tech Stack
+### � Advanced Features
+- **Certificate Generation**: Digital donation certificates
+- **Impact Tracking**: Lives saved statistics
+- **Donation History**: Complete donation records
+- **Hospital Analytics**: Comprehensive statistics
+- **Map Integration**: Google Maps for location services
+
+## �🛠️ Tech Stack
 
 ### Backend
 - **Node.js** + **Express.js** - Server framework
@@ -35,6 +45,9 @@ A comprehensive, production-ready web application that connects blood donors, re
 - **JWT** - Authentication
 - **bcryptjs** - Password hashing
 - **express-validator** - Input validation
+- **multer** - File upload handling
+- **qrcode** - QR code generation
+- **dotenv** - Environment variable management
 
 ### Frontend
 - **React.js** - UI framework with Hooks
@@ -43,6 +56,237 @@ A comprehensive, production-ready web application that connects blood donors, re
 - **Framer Motion** - Animations
 - **Axios** - HTTP client
 - **Heroicons** - Icon library
+- **Socket.IO Client** - Real-time communication
+
+### External Services
+- **Google Maps API** - Location services
+- **MongoDB Atlas** - Cloud database (optional)
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Node.js (v14 or higher)
+- MongoDB (local or Atlas)
+- Google Maps API Key
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/your-username/bloodnet-plus.git
+   cd bloodnet-plus
+   ```
+
+2. **Install dependencies**
+   ```bash
+   # Backend dependencies
+   cd backend
+   npm install
+   
+   # Frontend dependencies
+   cd ../frontend
+   npm install
+   ```
+
+3. **Setup environment variables**
+   ```bash
+   # Backend
+   cd backend
+   cp .env.example .env
+   # Edit .env with your credentials
+   
+   # Frontend
+   cd ../frontend
+   cp .env.example .env
+   # Edit .env with your API keys
+   ```
+
+4. **Start MongoDB**
+   ```bash
+   # Local MongoDB
+   mongod
+   
+   # Or connect to MongoDB Atlas
+   ```
+
+5. **Run the application**
+   ```bash
+   # Backend (Terminal 1)
+   cd backend
+   npm start
+   
+   # Frontend (Terminal 2)
+   cd frontend
+   npm start
+   ```
+
+6. **Access the application**
+   - Frontend: http://localhost:3000
+   - Backend API: http://localhost:5000
+
+## 📱 Usage
+
+### For Recipients
+1. Register as a recipient
+2. Create blood donation requests
+3. Track request status in real-time
+4. View nearby donors and hospitals
+
+### For Donors
+1. Register as a donor with health details
+2. Set availability status
+3. View and accept donation requests
+4. Track donation history and certificates
+
+### For Hospitals
+1. Register as a hospital
+2. Manage blood inventory
+3. Respond to blood requests
+4. View analytics and statistics
+
+## 🔧 Configuration
+
+### Environment Variables
+
+#### Backend (.env)
+```bash
+MONGODB_URI=mongodb://localhost:27017/bloodnet
+PORT=5000
+JWT_SECRET=your_secure_jwt_secret_key_here
+GOOGLE_MAPS_API_KEY=your_google_maps_api_key_here
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USER=your_email@gmail.com
+EMAIL_PASS=your_app_password
+NODE_ENV=development
+```
+
+#### Frontend (.env)
+```bash
+REACT_APP_GOOGLE_MAPS_API_KEY=YOUR_GOOGLE_MAPS_API_KEY
+REACT_APP_API_URL=http://localhost:5000
+REACT_APP_NAME=BloodNet+
+REACT_APP_VERSION=1.0.0
+NODE_ENV=development
+```
+
+### Google Maps API Setup
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select existing one
+3. Enable "Maps JavaScript API" and "Geocoding API"
+4. Create API key with appropriate restrictions
+5. Add API key to both frontend and backend .env files
+
+## 📊 API Documentation
+
+### Authentication Endpoints
+- `POST /api/auth/register` - User registration
+- `POST /api/auth/login` - User login
+- `POST /api/auth/logout` - User logout
+
+### User Endpoints
+- `GET /api/users/profile` - Get user profile
+- `PUT /api/users/profile` - Update user profile
+- `GET /api/users/donation-history` - Get donation history
+- `POST /api/users/search-donors` - Search nearby donors
+
+### Request Endpoints
+- `POST /api/requests/create` - Create blood request
+- `GET /api/requests` - Get all requests
+- `PUT /api/requests/:id/accept` - Accept request
+- `PUT /api/requests/:id/reject` - Reject request
+
+### Hospital Endpoints
+- `GET /api/hospitals/inventory` - Get blood inventory
+- `PUT /api/hospitals/inventory` - Update inventory
+- `GET /api/hospitals/stats` - Get hospital statistics
+
+### Real-time Events
+- `newBloodRequest` - New blood request created
+- `requestUpdate` - Request status updated
+- `newNotification` - New notification received
+
+## 🧪 Testing
+
+### Running Tests
+```bash
+# Backend tests
+cd backend
+npm test
+
+# Frontend tests
+cd frontend
+npm test
+```
+
+### Test Coverage
+- Authentication flows
+- Request creation and management
+- Real-time updates
+- API endpoints
+- UI components
+
+## 📦 Deployment
+
+### Production Deployment
+
+#### Using Docker
+```bash
+# Build Docker images
+docker-compose build
+
+# Run containers
+docker-compose up -d
+```
+
+#### Manual Deployment
+1. Set production environment variables
+2. Build frontend: `npm run build`
+3. Start backend: `npm start`
+4. Use reverse proxy (Nginx) for production
+
+#### Environment Setup
+```bash
+# Production environment variables
+NODE_ENV=production
+MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/bloodnet
+JWT_SECRET=super_secure_production_secret
+```
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/new-feature`
+3. Commit changes: `git commit -am 'Add new feature'`
+4. Push to branch: `git push origin feature/new-feature`
+5. Submit a pull request
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- Blood donors and recipients worldwide
+- Medical professionals and healthcare workers
+- Open source community
+- Google Maps Platform
+- MongoDB Atlas
+
+## 📞 Support
+
+For support, email support@bloodnetplus.com or create an issue on GitHub.
+
+## 🔗 Links
+
+- [Live Demo](https://bloodnetplus-demo.herokuapp.com)
+- [Documentation](https://docs.bloodnetplus.com)
+- [API Reference](https://api.bloodnetplus.com)
+- [GitHub Repository](https://github.com/your-username/bloodnet-plus)
+
+---
+
+**Made with ❤️ for saving lives**
 
 ### Database
 - **MongoDB** - NoSQL database
