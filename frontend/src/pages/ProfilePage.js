@@ -25,8 +25,11 @@ const ProfilePage = () => {
     // If it's already a full URL, return as is
     if (imagePath.startsWith('http')) return imagePath;
     // If it's a relative path, construct full URL
-    const fullUrl = `http://localhost:5000${imagePath}`;
-    console.log('Constructed image URL:', fullUrl);
+    const baseUrl = process.env.REACT_APP_API_URL 
+      ? process.env.REACT_APP_API_URL.replace(/\/api\/?$/, '') 
+      : 'http://localhost:5000';
+    const cleanPath = imagePath.startsWith('/') ? imagePath : `/${imagePath}`;
+    const fullUrl = `${baseUrl}${cleanPath}`;
     return fullUrl;
   };
   
