@@ -52,7 +52,16 @@ app.use('/uploads', express.static('uploads'));
 
 // Health check endpoint for cloud monitoring (Render, Railway, etc.)
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() });
+  const mongoStates = ['disconnected', 'connected', 'connecting', 'disconnecting'];
+  const state = mongoose.connection.readyState;
+  res.status(200).json({
+    status: 'ok',
+    uptime: process.uptime(),
+    database: mongoStates[state] || 'unknown',
+    mongoReadyState: state,
+    hasMongoUriEnv: Boolean(process.env.MONGODB_URI),
+    timestamp: new Date().toISOString()
+  });
 });
 
 app.get('/', (req, res) => {
