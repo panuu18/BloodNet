@@ -56,15 +56,15 @@ app.get('/api/health', (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.send('BloodNet+ API server is running smoothly.');
+  res.json({ message: 'BloodNet+ API Server is running', status: 'OK' });
 });
 
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/bloodnet')
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/bloodnet', { serverSelectionTimeoutMS: 5000 })
   .then(() => {
     console.log('Connected to MongoDB');
   })
   .catch((err) => {
-    console.error('MongoDB connection error:', err);
+    console.error('MongoDB connection error:', err.message);
     console.log('Starting server without MongoDB connection...');
   });
 
@@ -81,7 +81,7 @@ app.use('/api/requests', requestRoutes);
 app.use('/api/hospitals', hospitalRoutes);
 app.use('/api/notifications', notificationRoutes);
 // app.use('/api/certificates', certificateRoutes); // Temporarily disabled
-// app.use('/api/admin', require('./routes/admin')); // Temporarily disabled
+app.use('/api/admin', require('./routes/admin'));
 
 const connectedUsers = new Map();
 

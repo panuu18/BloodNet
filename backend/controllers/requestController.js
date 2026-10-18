@@ -185,7 +185,7 @@ const getMyRequests = async (req, res) => {
 
 const getNearbyRequests = async (req, res) => {
   try {
-    const { maxDistance = 50 } = req.query;
+    const { maxDistance = 200 } = req.query;
     const user = await User.findById(req.user.id);
 
     let query = {

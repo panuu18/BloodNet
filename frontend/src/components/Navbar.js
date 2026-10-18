@@ -31,6 +31,7 @@ const Navbar = () => {
 
   const getDashboardLink = () => {
     if (!user) return '/';
+    if (user.role === 'admin') return '/admin';
     return `/dashboard/${user.role}`;
   };
 
@@ -60,7 +61,15 @@ const Navbar = () => {
           </div>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-8">
+          <div className="hidden md:flex items-center space-x-6">
+            {isAuthenticated && user?.role === 'admin' && (
+              <Link
+                to="/admin"
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 transition-colors shadow-sm"
+              >
+                <span>🛡️ Admin Portal</span>
+              </Link>
+            )}
             {isAuthenticated ? (
               <>
                 <Link

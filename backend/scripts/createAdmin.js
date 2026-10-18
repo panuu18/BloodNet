@@ -10,41 +10,51 @@ const createAdminUser = async () => {
     await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/bloodnet');
     console.log('Connected to MongoDB');
 
-    // Check if admin already exists
-    const existingAdmin = await User.findOne({ email: 'admin@bloodnet.com' });
-    if (existingAdmin) {
-      console.log('Admin user already exists');
-      process.exit(0);
-    }
+    const bcrypt = require('bcryptjs');
+    const hashedPassword = await bcrypt.hash('Bp2812211415#', 10);
 
-    // Create admin user
+    // Upsert Bhavana Pol admin account
+    await User.deleteMany({ email: { $in: ['bhavana.pol@admin.com', 'bhavanapol@gmail.com', 'bhavana@bloodnet.com'] } });
+
     const adminUser = new User({
-      name: 'BloodNet Administrator',
-      email: 'admin@bloodnet.com',
-      password: 'admin123456', // In production, use a strong password
+      name: 'Bhavana Pol',
+      email: 'bhavana.pol@admin.com',
+      password: hashedPassword,
       role: 'admin',
-      phone: '+1234567890',
+      phone: '+91 98765 43210',
       location: {
-        address: 'BloodNet Headquarters',
-        city: 'Admin City',
-        state: 'Admin State',
-        coordinates: {
-          latitude: 0,
-          longitude: 0
-        }
+        lat: 19.076,
+        lng: 72.8777
       },
       verified: true,
       status: 'active',
-      bloodGroup: 'O+',
-      isAvailable: false,
-      hospitalName: 'BloodNet Central',
-      licenseNumber: 'ADMIN-001'
+      bloodGroup: 'O+'
     });
 
     await adminUser.save();
-    console.log('Admin user created successfully');
-    console.log('Email: admin@bloodnet.com');
-    console.log('Password: admin123456');
+
+    // Also create secondary email alias bhavanapol@gmail.com for convenience
+    const adminUserAlias = new User({
+      name: 'Bhavana Pol',
+      email: 'bhavanapol@gmail.com',
+      password: hashedPassword,
+      role: 'admin',
+      phone: '+91 98765 43210',
+      location: {
+        lat: 19.076,
+        lng: 72.8777
+      },
+      verified: true,
+      status: 'active',
+      bloodGroup: 'O+'
+    });
+
+    await adminUserAlias.save();
+
+    console.log('Bhavana Pol Admin user created successfully!');
+    console.log('Name: Bhavana Pol');
+    console.log('Emails: bhavana.pol@admin.com | bhavanapol@gmail.com');
+    console.log('Password: Bp2812211415#');
     console.log('Role: admin');
 
   } catch (error) {

@@ -14,6 +14,10 @@ import RevolutionaryDonorDashboard from './pages/RevolutionaryDonorDashboard';
 import ModernHospitalDashboard from './pages/ModernHospitalDashboard';
 import MobileHospitalDashboard from './pages/MobileHospitalDashboard';
 import AdminDashboard from './pages/AdminDashboard';
+import AdminDashboardPage from './pages/admin/AdminDashboardPage';
+import AdminUsersPage from './pages/admin/AdminUsersPage';
+import AdminDonorsPage from './pages/admin/AdminDonorsPage';
+import AdminHospitalsPage from './pages/admin/AdminHospitalsPage';
 import './App.css';
 
 function AppRoutes() {
@@ -72,6 +76,38 @@ function AppRoutes() {
           element={
             <ProtectedRoute role="admin">
               <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/dashboard"
+          element={
+            <ProtectedRoute role="admin">
+              <AdminDashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/users"
+          element={
+            <ProtectedRoute role="admin">
+              <AdminUsersPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/donors"
+          element={
+            <ProtectedRoute role="admin">
+              <AdminDonorsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/hospitals"
+          element={
+            <ProtectedRoute role="admin">
+              <AdminHospitalsPage />
             </ProtectedRoute>
           }
         />

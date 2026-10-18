@@ -309,6 +309,11 @@ const RevolutionaryDonorDashboard = () => {
         title: 'Blood Donation Request',
         text: message,
         url: window.location.href
+      }).catch(err => {
+        console.log('Share cancelled or failed:', err);
+        // Fallback to clipboard if share fails
+        navigator.clipboard.writeText(message);
+        notify('Request details copied to clipboard!', 'success');
       });
     } else {
       navigator.clipboard.writeText(message);

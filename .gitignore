@@ -10,3 +10,5 @@ logs
 backend/logs
 uploads
 backend/uploads
+build
+frontend/build

@@ -79,7 +79,7 @@ const LoginPage = () => {
       console.log('Login successful, user role:', response.user.role);
       
       // Redirect to appropriate dashboard based on user role
-      const dashboardPath = `/dashboard/${response.user.role}`;
+      const dashboardPath = response.user.role === 'admin' ? '/admin' : `/dashboard/${response.user.role}`;
       navigate(dashboardPath, { replace: true });
     } catch (err) {
       console.error('Login error:', err);
