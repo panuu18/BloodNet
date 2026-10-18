@@ -2,7 +2,7 @@ services:
   - type: web
     name: bloodnet-backend
     runtime: node
-    rootDir: BloodNet 2/backend
+    rootDir: backend
     buildCommand: npm install
     startCommand: node server.js
     healthCheckPath: /api/health

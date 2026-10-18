@@ -32,7 +32,7 @@ This document summarizes what was completed today and the exact step-by-step che
 2. Select **Build and deploy from a Git repository** and connect: `panuu18/BloodNet`.
 3. Fill in the service configuration:
    - **Name**: `bloodnet-backend`
-   - **Root Directory**: `BloodNet 2/backend`
+   - **Root Directory**: `backend`
    - **Runtime**: `Node`
    - **Build Command**: `npm install`
    - **Start Command**: `node server.js`
