@@ -8,6 +8,13 @@ const bodyParser = require('body-parser');
 
 dotenv.config();
 
+const dns = require('dns');
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1']);
+} catch (e) {
+  // Ignore if custom dns servers cannot be set
+}
+
 const app = express();
 const server = http.createServer(app);
 
