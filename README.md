@@ -1,6 +1,24 @@
 # 🩸 BloodNet+ - Real-Time Blood Donation Platform
 
-A comprehensive, production-ready web application that connects blood donors, recipients, and hospitals in real-time. Built with modern technologies and featuring a beautiful, responsive UI.
+[![Live Demo](https://img.shields.io/badge/Live_Website-bloodnet--plus.vercel.app-E11D48?style=for-the-badge&logo=vercel&logoColor=white)](https://bloodnet-plus.vercel.app/)
+[![Repository](https://img.shields.io/badge/GitHub-panuu18%2FBloodNet-blue?style=for-the-badge&logo=github)](https://github.com/panuu18/BloodNet)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
+
+> 🌐 **Live Website:** [https://bloodnet-plus.vercel.app/](https://bloodnet-plus.vercel.app/)
+
+---
+
+## 💡 About BloodNet+
+
+Every two seconds, someone in the world needs blood—whether for emergency trauma, urgent surgeries, accident victims, cancer treatments, or routine care for conditions like thalassemia. In critical situations, finding a compatible blood donor or checking hospital inventory often turns into an agonizing, chaotic race against time.
+
+**BloodNet+** bridges this life-saving gap. It is an end-to-end, community-driven emergency network that connects recipients in urgent need, voluntary blood donors ready to save lives, and healthcare institutions managing blood inventories—all in real time.
+
+- 🆘 **Recipients & Families:** Create verified emergency requests in seconds, find nearby compatible donors, and track status live.
+- ❤️ **Voluntary Donors:** Receive instant, location-based notifications for compatible requests nearby, manage availability, and earn verified donation certificates.
+- 🏥 **Hospitals & Blood Banks:** Manage real-time blood stock levels, respond to critical requests, and access analytics to prevent shortages.
+
+---
 
 ## 🌟 Features
 
@@ -73,8 +91,8 @@ A comprehensive, production-ready web application that connects blood donors, re
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/your-username/bloodnet-plus.git
-   cd bloodnet-plus
+   git clone https://github.com/panuu18/BloodNet.git
+   cd BloodNet
    ```
 
 2. **Install dependencies**
@@ -119,10 +137,6 @@ A comprehensive, production-ready web application that connects blood donors, re
    cd frontend
    npm start
    ```
-
-6. **Access the application**
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:5000
 
 ## 📱 Usage
 
@@ -279,10 +293,8 @@ For support, email support@bloodnetplus.com or create an issue on GitHub.
 
 ## 🔗 Links
 
-- [Live Demo](https://bloodnetplus-demo.herokuapp.com)
-- [Documentation](https://docs.bloodnetplus.com)
-- [API Reference](https://api.bloodnetplus.com)
-- [GitHub Repository](https://github.com/your-username/bloodnet-plus)
+- [Live Website](https://bloodnet-plus.vercel.app/)
+- [GitHub Repository](https://github.com/panuu18/BloodNet)
 
 ---
 
@@ -303,8 +315,8 @@ For support, email support@bloodnetplus.com or create an issue on GitHub.
 
 1. **Clone the repository**
 ```bash
-git clone <repository-url>
-cd BloodNet-2
+git clone https://github.com/panuu18/BloodNet.git
+cd BloodNet
 ```
 
 2. **Install Backend Dependencies**
@@ -348,10 +360,6 @@ Start the frontend development server:
 cd frontend
 npm start
 ```
-
-7. **Access the Application**
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:5000
 
 ## 📁 Project Structure
 
