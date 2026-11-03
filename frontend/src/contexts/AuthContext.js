@@ -78,6 +78,9 @@ export const AuthProvider = ({ children }) => {
         } catch (error) {
           localStorage.removeItem('token');
           dispatch({ type: 'LOGOUT' });
+        } finally {
+          // Always stop loading — even if server is unreachable (e.g. Render free tier cold start)
+          dispatch({ type: 'SET_LOADING', payload: false });
         }
       } else {
         dispatch({ type: 'SET_LOADING', payload: false });
