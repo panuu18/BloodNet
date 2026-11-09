@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BloodNet+ Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 500px;
+        }
+        h1 {
+            color: #E63946;
+            margin-bottom: 20px;
+            font-size: 2.5em;
+        }
+        p {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.2em;
+        }
+        .button {
+            display: inline-block;
+            padding: 15px 30px;
+            margin: 10px;
+            background: #E63946;
+            color: white;
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: bold;
+            transition: transform 0.3s ease;
+        }
+        .button:hover {
+            transform: translateY(-2px);
+            background: #d62828;
+        }
+        .button.secondary {
+            background: #2EC4B6;
+        }
+        .button.secondary:hover {
+            background: #26b5a8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🩸 BloodNet+</h1>
+        <p>If you can see this page, the server is working!</p>
+        <div>
+            <a href="/login" class="button">Login</a>
+            <a href="/register" class="button secondary">Register</a>
+        </div>
+        <p style="margin-top: 30px; font-size: 0.9em; color: #999;">
+            Test page for BloodNet+ application
+        </p>
+    </div>
+</body>
+</html>

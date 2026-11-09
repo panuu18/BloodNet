@@ -5,6 +5,8 @@ const dotenv = require('dotenv');
 const http = require('http');
 const socketIo = require('socket.io');
 const bodyParser = require('body-parser');
+const path = require('path');
+const fs = require('fs');
 
 dotenv.config();
 
@@ -71,9 +73,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-app.get('/', (req, res) => {
-  res.json({ message: 'BloodNet+ API Server is running', status: 'OK' });
-});
+
 
 
 
@@ -101,6 +101,22 @@ app.use('/api/hospitals', hospitalRoutes);
 app.use('/api/notifications', notificationRoutes);
 // app.use('/api/certificates', certificateRoutes); // Temporarily disabled
 app.use('/api/admin', require('./routes/admin'));
+
+// Serve frontend static build if present
+const publicDir = path.join(__dirname, 'public');
+if (fs.existsSync(publicDir)) {
+  app.use(express.static(publicDir));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/socket.io') || req.path.startsWith('/uploads')) {
+      return next();
+    }
+    res.sendFile(path.join(publicDir, 'index.html'));
+  });
+} else {
+  app.get('/', (req, res) => {
+    res.json({ message: 'BloodNet+ API Server is running', status: 'OK' });
+  });
+}
 
 const connectedUsers = new Map();
 
