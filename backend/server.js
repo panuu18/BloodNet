@@ -77,24 +77,6 @@ app.get('/', (req, res) => {
 
 
 
-// TEMPORARY: One-time admin seeder - secured by secret token
-app.post('/api/_seed_admin_once', async (req, res) => {
-  const SEED_SECRET = 'BLOODNET_SEED_2026_TEMP';
-  if (req.headers['x-seed-secret'] !== SEED_SECRET) {
-    return res.status(403).json({ message: 'Forbidden' });
-  }
-  try {
-    const User = require('./models/User');
-    const bcrypt = require('bcryptjs');
-    await User.deleteMany({ email: { $in: ['bloodnet@admin.com', 'bhavana.pol@admin.com', 'bhavanapol@gmail.com', 'bhavana@bloodnet.com'] } });
-    const hashedPassword = await bcrypt.hash('12345678', 10);
-    const admin = new User({ name: 'BloodNet Admin', email: 'bloodnet@admin.com', password: hashedPassword, role: 'admin', phone: '+919876543210', location: { lat: 19.076, lng: 72.8777 }, bloodGroup: 'O+' });
-    await admin.save();
-    return res.json({ message: 'Admin updated successfully', email: 'bloodnet@admin.com' });
-  } catch (err) {
-    return res.status(500).json({ message: 'Seed failed', error: err.message });
-  }
-});
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/bloodnet', { serverSelectionTimeoutMS: 5000 })
   .then(() => {
     console.log('Connected to MongoDB');
