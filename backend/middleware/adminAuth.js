@@ -2,7 +2,6 @@ const User = require('../models/User');
 
 const adminAuth = async (req, res, next) => {
   try {
-    // Get user from the auth middleware (already attached to req.user)
     const user = await User.findById(req.user.id);
     
     if (!user) {
@@ -14,14 +13,9 @@ const adminAuth = async (req, res, next) => {
       return res.status(403).json({ message: 'Access denied. Admin privileges required.' });
     }
 
-    // Check if user is active
-    if (user.status !== 'active') {
-      return res.status(403).json({ message: 'Account is not active' });
-    }
-
-    // Check if user is verified
-    if (!user.verified) {
-      return res.status(403).json({ message: 'Account is not verified' });
+    // Check if account is suspended/inactive (if status is explicitly set)
+    if (user.status && user.status === 'inactive') {
+      return res.status(403).json({ message: 'Account is inactive' });
     }
 
     // Attach admin user info to request

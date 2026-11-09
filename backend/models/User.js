@@ -67,6 +67,15 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+    status: {
+    type: String,
+    enum: ['active', 'inactive', 'suspended', 'pending'],
+    default: 'active'
+  },
+  verified: {
+    type: Boolean,
+    default: true
+  },
   certificates: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Certificate'

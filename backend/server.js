@@ -78,25 +78,6 @@ app.get('/', (req, res) => {
 
 
 
-// TEMPORARY: One-time admin name updater
-app.post('/api/_update_admin_name', async (req, res) => {
-  const SECRET = 'BLOODNET_SEED_2026_TEMP';
-  if (req.headers['x-seed-secret'] !== SECRET) return res.status(403).json({ message: 'Forbidden' });
-  try {
-    const User = require('./models/User');
-    const bcrypt = require('bcryptjs');
-    await User.deleteMany({ email: { $in: ['bhavana.pol@admin.com', 'bhavanapol@gmail.com', 'bhavana@bloodnet.com'] } });
-    const hashedPassword = await bcrypt.hash('12345678', 10);
-    const updated = await User.findOneAndUpdate(
-      { email: 'bloodnet@admin.com' },
-      { name: 'Rohit S. Sanas', role: 'admin', password: hashedPassword },
-      { upsert: true, new: true }
-    );
-    return res.json({ message: 'Admin updated to Rohit S. Sanas', user: updated });
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
-});
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/bloodnet', { serverSelectionTimeoutMS: 5000 })
   .then(() => {
     console.log('Connected to MongoDB');
