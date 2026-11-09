@@ -76,32 +76,6 @@ app.get('/', (req, res) => {
 });
 
 
-// TEMPORARY: One-time admin seeder — secured by secret token
-app.post('/api/_seed_admin_once', async (req, res) => {
-  const SEED_SECRET = 'BLOODNET_SEED_2026_TEMP';
-  if (req.headers['x-seed-secret'] !== SEED_SECRET) {
-    return res.status(403).json({ message: 'Forbidden' });
-  }
-  try {
-    const User = require('./models/User');
-    const bcrypt = require('bcryptjs');
-    const existing = await User.findOne({ email: 'bhavana.pol@admin.com' });
-    if (existing) {
-      return res.json({ message: 'Admin already exists', email: existing.email, role: existing.role });
-    }
-    const hashedPassword = await bcrypt.hash('Bp2812211415#', 10);
-    const admin = new User({ name: 'Bhavana Pol', email: 'bhavana.pol@admin.com', password: hashedPassword, role: 'admin', phone: '+919876543210', location: { lat: 19.076, lng: 72.8777 }, bloodGroup: 'O+' });
-    await admin.save();
-    const existing2 = await User.findOne({ email: 'bhavanapol@gmail.com' });
-    if (!existing2) {
-      const admin2 = new User({ name: 'Bhavana Pol', email: 'bhavanapol@gmail.com', password: hashedPassword, role: 'admin', phone: '+919876543210', location: { lat: 19.076, lng: 72.8777 }, bloodGroup: 'O+' });
-      await admin2.save();
-    }
-    return res.json({ message: 'Admin seeded successfully', email: 'bhavana.pol@admin.com' });
-  } catch (err) {
-    return res.status(500).json({ message: 'Seed failed', error: err.message });
-  }
-});
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/bloodnet', { serverSelectionTimeoutMS: 5000 })
   .then(() => {
     console.log('Connected to MongoDB');
