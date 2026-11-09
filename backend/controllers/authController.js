@@ -61,13 +61,16 @@ const register = async (req, res) => {
 
     try {
       await AuditLog.create({
-        action: 'login_success',
+        action: 'user_created',
         userId: user._id,
         targetUserId: user._id,
-        details: `${user.role.toUpperCase()} logged in: ${user.name || user.hospitalName || user.email}`
+        details: `New ${user.role.toUpperCase()} registered: ${user.name || user.hospitalName || user.email}`
       });
+      if (global.io) {
+        global.io.emit('adminUpdate', { type: 'user_registered', id: user._id });
+      }
     } catch (e) {
-      console.error('AuditLog login error:', e.message);
+      console.error('AuditLog register error:', e.message);
     }
 
     await Notification.create({
@@ -127,6 +130,9 @@ const login = async (req, res) => {
         targetUserId: user._id,
         details: `${user.role.toUpperCase()} logged in: ${user.name || user.hospitalName || user.email}`
       });
+      if (global.io) {
+        global.io.emit('adminUpdate', { type: 'user_login', id: user._id });
+      }
     } catch (e) {
       console.error('AuditLog login error:', e.message);
     }

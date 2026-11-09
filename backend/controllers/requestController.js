@@ -309,6 +309,16 @@ const respondToRequest = async (req, res) => {
       });
     }
 
+    try {
+      await AuditLog.create({
+        action: 'request_status_updated',
+        userId: req.user.id,
+        requestId: request._id,
+        details: `Request response recorded (${status}) by user ${req.user.name || req.user.id}`
+      });
+      if (global.io) global.io.emit('adminUpdate', { type: 'request', id: request._id });
+    } catch (e) { console.error('AuditLog error:', e.message); }
+
     res.json({ request });
   } catch (error) {
     console.error('Respond to request error:', error);
@@ -367,6 +377,16 @@ const deleteRequest = async (req, res) => {
     await Request.findByIdAndDelete(requestId);
     console.log('Request deleted successfully');
     
+    try {
+      await AuditLog.create({
+        action: 'request_deleted',
+        userId: req.user.id,
+        requestId: request._id,
+        details: `Blood request for ${request.bloodGroup} deleted by user`
+      });
+      if (global.io) global.io.emit('adminUpdate', { type: 'request', id: request._id });
+    } catch (e) { console.error('AuditLog error:', e.message); }
+
     res.json({ message: 'Request deleted successfully' });
   } catch (error) {
     console.error('Delete request error:', error);

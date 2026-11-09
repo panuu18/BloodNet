@@ -837,8 +837,8 @@ const emergencyBroadcast = async (req, res) => {
       userId: u._id,
       title: title || 'BloodNet+ Emergency Alert',
       message: alertMsg,
-      type: 'emergency',
-      priority: 'high'
+      type: 'system',
+      priority: 'urgent'
     }));
     if (notifs.length > 0) {
       await Notification.insertMany(notifs);
