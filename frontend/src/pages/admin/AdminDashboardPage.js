@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import AdminNavPills from './AdminNavPills';
@@ -16,6 +17,7 @@ import {
 import { HeartIcon as HeartSolidIcon, ShieldCheckIcon as ShieldSolidIcon } from '@heroicons/react/24/solid';
 
 const AdminDashboardPage = () => {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [showBroadcastModal, setShowBroadcastModal] = useState(false);
   const [toastMessage, setToastMessage] = useState('');

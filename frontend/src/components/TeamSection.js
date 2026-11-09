@@ -34,28 +34,28 @@ const TeamSection = () => {
 
   const teamMembers = [
     {
-      name: "Bhavana Pol",
+      name: "Rohit Sharad Sanas",
       role: "Full Stack Developer",
       description: "Frontend, Backend Integration, UI Design, Project Architecture",
       icon: <UserGroupIcon className="h-12 w-12 text-red-400" />,
       color: "red"
     },
     {
-      name: "Pranav Shedage",
+      name: "Vighnesh N. Suryawanshi",
       role: "Backend Developer",
       description: "API Development, Database Design, Authentication System",
       icon: <CircleStackIcon className="h-12 w-12 text-red-500" />,
       color: "red"
     },
     {
-      name: "Sanskruti Sawant",
+      name: "Rohit Ganesh Sanas",
       role: "Frontend Developer",
-      description: "UI Components, Responsiveness, Animations - Fixed",
+      description: "UI Components, Responsiveness, Animations",
       icon: <PaintBrushIcon className="h-12 w-12 text-red-600" />,
       color: "red"
     },
     {
-      name: "Rohit Sanas",
+      name: "Manish Rajesh Bodake",
       role: "Testing & Documentation",
       description: "Testing, Debugging, Report Preparation",
       icon: <DocumentCheckIcon className="h-12 w-12 text-red-300" />,

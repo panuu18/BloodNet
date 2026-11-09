@@ -19,7 +19,7 @@ mongoose.connect('mongodb://localhost:27017/bloodnet')
     console.log('Connected to MongoDB');
     
     // Get the user
-    const user = await User.findOne({ name: /bhavana pol/i });
+    const user = await User.findOne({ name: /rohit s. sanas/i });
     console.log('\n=== User Location ===');
     console.log('User:', user.name);
     console.log('Location:', user.location);

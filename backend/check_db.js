@@ -6,8 +6,8 @@ mongoose.connect('mongodb://localhost:27017/bloodnet')
   .then(async () => {
     console.log('Connected to MongoDB');
     
-    // Find user "bhavana pol"
-    const user = await User.findOne({ name: /bhavana pol/i });
+    // Find user "rohit s. sanas"
+    const user = await User.findOne({ name: /rohit s. sanas/i });
     console.log('\n=== User Info ===');
     if (user) {
       console.log('Name:', user.name);

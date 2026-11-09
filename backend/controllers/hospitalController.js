@@ -4,6 +4,7 @@ const BloodInventory = require('../models/BloodInventory');
 const Request = require('../models/Request');
 const Notification = require('../models/Notification');
 const DonationCamp = require('../models/DonationCamp');
+const AuditLog = require('../models/AuditLog');
 
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
   const R = 6371;
@@ -137,6 +138,19 @@ const updateInventory = async (req, res) => {
     if (maxCapacity !== undefined) inventory.maxCapacity = maxCapacity;
 
     await inventory.save();
+
+    try {
+      await AuditLog.create({
+        action: 'hospital_updated',
+        userId: req.user.id,
+        details: `Hospital inventory updated: ${bloodGroup} (${inventory.unitsAvailable} units available)`
+      });
+      if (global.io) {
+        global.io.emit('adminUpdate', { type: 'inventory_update', hospitalId: req.user.id });
+      }
+    } catch (e) {
+      console.error('AuditLog error:', e.message);
+    }
 
     if (inventory.isLowStock()) {
       await Notification.create({

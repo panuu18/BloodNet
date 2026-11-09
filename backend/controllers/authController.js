@@ -3,6 +3,7 @@ const { validationResult } = require('express-validator');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
+const AuditLog = require('../models/AuditLog');
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'bloodnet_fallback_secret_key_2026', {
@@ -58,6 +59,17 @@ const register = async (req, res) => {
 
     const token = generateToken(user._id);
 
+    try {
+      await AuditLog.create({
+        action: 'login_success',
+        userId: user._id,
+        targetUserId: user._id,
+        details: `${user.role.toUpperCase()} logged in: ${user.name || user.hospitalName || user.email}`
+      });
+    } catch (e) {
+      console.error('AuditLog login error:', e.message);
+    }
+
     await Notification.create({
       userId: user._id,
       title: 'Welcome to BloodNet+',
@@ -107,6 +119,17 @@ const login = async (req, res) => {
     }
 
     const token = generateToken(user._id);
+
+    try {
+      await AuditLog.create({
+        action: 'login_success',
+        userId: user._id,
+        targetUserId: user._id,
+        details: `${user.role.toUpperCase()} logged in: ${user.name || user.hospitalName || user.email}`
+      });
+    } catch (e) {
+      console.error('AuditLog login error:', e.message);
+    }
 
     res.json({
       token,

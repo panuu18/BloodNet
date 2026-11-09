@@ -96,4 +96,35 @@ export const certificateAPI = {
   downloadCertificate: (certificateId) => api.get(`/certificates/${certificateId}/download`, { responseType: 'blob' }),
 };
 
+
+export const adminAPI = {
+  getOverview: () => api.get('/admin/overview'),
+  getMetrics: () => api.get('/admin/metrics'),
+  getUsers: (params) => api.get('/admin/users', { params }),
+  getUserStats: () => api.get('/admin/users/stats'),
+  createUser: (data) => api.post('/admin/users', data),
+  updateUser: (id, data) => api.put(`/admin/users/${id}`, data),
+  deleteUser: (id) => api.delete(`/admin/users/${id}`),
+  activateUser: (id) => api.post(`/admin/users/${id}/activate`),
+  deactivateUser: (id) => api.post(`/admin/users/${id}/deactivate`),
+  getRequests: (params) => api.get('/admin/requests', { params }),
+  getRequestStats: () => api.get('/admin/requests/stats'),
+  updateRequestStatus: (id, data) => api.put(`/admin/requests/${id}/status`, data),
+  deleteRequest: (id) => api.delete(`/admin/requests/${id}`),
+  getEmergencyRequests: () => api.get('/admin/requests/emergency'),
+  getHospitals: () => api.get('/admin/hospitals'),
+  updateHospital: (id, data) => api.put(`/admin/hospitals/${id}`, data),
+  deleteHospital: (id) => api.delete(`/admin/hospitals/${id}`),
+  getAlerts: (params) => api.get('/admin/alerts', { params }),
+  createAlert: (data) => api.post('/admin/alerts', data),
+  resolveAlert: (id) => api.post(`/admin/alerts/${id}/resolve`),
+  deleteAlert: (id) => api.delete(`/admin/alerts/${id}`),
+  getAuditTrail: () => api.get('/admin/audit/trail'),
+  getSecurityLogs: () => api.get('/admin/security/logs'),
+  emergencyBroadcast: (data) => api.post('/admin/emergency/broadcast', data),
+  getSettings: () => api.get('/admin/settings'),
+  updateSettings: (data) => api.put('/admin/settings', data),
+  getDashboardAnalytics: () => api.get('/admin/analytics/dashboard'),
+};
+
 export default api;

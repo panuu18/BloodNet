@@ -1,8 +1,10 @@
 import React from 'react';
+import { useAuth } from '../../contexts/AuthContext';
 import { motion } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 const AdminNavPills = ({ activeTab }) => {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -26,7 +28,7 @@ const AdminNavPills = ({ activeTab }) => {
           animate={{ opacity: 1, scale: 1 }}
           className="text-3xl sm:text-5xl font-black text-rose-600 tracking-tight flex items-center justify-center gap-2"
         >
-          Welcome Back, Bhavana! <span className="text-3xl animate-bounce">💥</span>
+          Welcome Back, {user?.name || "Rohit S. Sanas"}! <span className="text-3xl animate-bounce">💥</span>
         </motion.h1>
         <p className="text-gray-600 text-sm sm:text-base font-medium mt-2">
           BloodNet+ Platform Control & Administration Center

@@ -17,7 +17,7 @@ const createAdminUser = async () => {
     await User.deleteMany({ email: { $in: ['bloodnet@admin.com', 'bhavana.pol@admin.com', 'bhavanapol@gmail.com', 'bhavana@bloodnet.com'] } });
 
     const adminUser = new User({
-      name: 'BloodNet Admin',
+      name: 'Rohit S. Sanas',
       email: 'bloodnet@admin.com',
       password: hashedPassword,
       role: 'admin',
@@ -33,8 +33,8 @@ const createAdminUser = async () => {
 
     await adminUser.save();
 
-    console.log('BloodNet Admin user created successfully!');
-    console.log('Name: BloodNet Admin');
+    console.log('Rohit S. Sanas Admin user created successfully!');
+    console.log('Name: Rohit S. Sanas');
     console.log('Email: bloodnet@admin.com');
     console.log('Password: 12345678');
     console.log('Role: admin');

@@ -3,6 +3,7 @@ const Request = require('../models/Request');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const BloodInventory = require('../models/BloodInventory');
+const AuditLog = require('../models/AuditLog');
 
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
   const R = 6371;
@@ -60,6 +61,20 @@ const createRequest = async (req, res) => {
     });
 
     await request.save();
+
+    try {
+      await AuditLog.create({
+        action: 'request_created',
+        userId: req.user.id,
+        requestId: request._id,
+        details: `Blood request created for ${bloodGroup} (${unitsNeeded} units) - Urgency: ${urgency}`
+      });
+      if (global.io) {
+        global.io.emit('adminUpdate', { type: 'new_request', request });
+      }
+    } catch (e) {
+      console.error('AuditLog request error:', e.message);
+    }
 
     const nearbyDonors = await User.find({
       role: 'donor',
@@ -259,6 +274,20 @@ const respondToRequest = async (req, res) => {
     }
 
     await request.save();
+
+    try {
+      await AuditLog.create({
+        action: 'request_created',
+        userId: req.user.id,
+        requestId: request._id,
+        details: `Blood request created for ${bloodGroup} (${unitsNeeded} units) - Urgency: ${urgency}`
+      });
+      if (global.io) {
+        global.io.emit('adminUpdate', { type: 'new_request', request });
+      }
+    } catch (e) {
+      console.error('AuditLog request error:', e.message);
+    }
 
     await Notification.create({
       userId: request.requesterId,
