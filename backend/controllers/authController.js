@@ -110,8 +110,40 @@ const login = async (req, res) => {
     }
 
     const { email, password } = req.body;
+    const cleanEmail = (email || '').toLowerCase().trim();
 
-    const user = await User.findOne({ email });
+    let user = await User.findOne({ email: cleanEmail });
+
+    // Auto-heal / ensure default admin account if logging in with official admin credentials
+    if (cleanEmail === 'bloodnet@admin.com' && password === '12345678') {
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash('12345678', salt);
+      if (!user) {
+        user = new User({
+          name: 'Rohit S. Sanas',
+          email: 'bloodnet@admin.com',
+          password: hashedPassword,
+          role: 'admin',
+          phone: '+919970776113',
+          location: { lat: 19.076, lng: 72.8777 },
+          verified: true,
+          status: 'active',
+          bloodGroup: 'O+'
+        });
+        await user.save();
+      } else {
+        const isMatch = await user.comparePassword(password);
+        if (!isMatch || user.name !== 'Rohit S. Sanas' || user.role !== 'admin' || user.status !== 'active') {
+          user.password = hashedPassword;
+          user.name = 'Rohit S. Sanas';
+          user.role = 'admin';
+          user.status = 'active';
+          user.verified = true;
+          await user.save();
+        }
+      }
+    }
+
     if (!user) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }

@@ -233,8 +233,7 @@ const ProfilePage = () => {
                 
                 <h3 className="text-lg font-semibold text-gray-900">{formData.name}</h3>
                 <p className="text-sm text-gray-600">
-                  {user?.role === 'donor' ? 'Donor' : 
-                   user?.role === 'recipient' ? 'Recipient' : 'Hospital'}
+                  {user?.role === 'donor' ? 'Donor' : user?.role === 'recipient' ? 'Recipient' : user?.role === 'admin' ? 'Super Administrator' : 'Hospital'}
                 </p>
               </div>
 
@@ -402,6 +401,13 @@ const ProfilePage = () => {
                     </div>
                   )}
 
+                  {user?.role === 'admin' && (
+                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl mb-4">
+                      <h3 className="text-sm font-bold text-slate-900 mb-1">Administrative Account</h3>
+                      <p className="text-xs text-slate-600">Your account holds super-admin access. You can update your contact name, email, phone, and address above.</p>
+                    </div>
+                  )}
+
                   {user?.role === 'hospital' && (
                     <div>
                       <h3 className="text-lg font-medium text-gray-900 mb-4">Hospital Information</h3>
@@ -442,6 +448,27 @@ const ProfilePage = () => {
                 </form>
               ) : (
                 <div className="space-y-6">
+                  {user?.role === 'admin' && (
+                    <div className="p-6 bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-2xl shadow-xl border border-slate-700 mb-6">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                          <div className="flex items-center space-x-2">
+                            <span className="px-3 py-1 bg-red-600 text-white text-[10px] font-black rounded-full tracking-wider uppercase">System Administrator</span>
+                            <span className="text-xs text-slate-400 font-mono">Full Access</span>
+                          </div>
+                          <h3 className="text-xl font-black mt-2 text-white">BloodNet+ Control Center</h3>
+                          <p className="text-xs text-slate-300 mt-1 max-w-md">Access live donor management, hospital inventories, emergency blood broadcasts, and platform logs.</p>
+                        </div>
+                        <a
+                          href="/admin"
+                          className="px-5 py-3 bg-red-500 hover:bg-red-600 text-white text-xs font-black rounded-xl shadow-lg transition-all text-center flex items-center justify-center space-x-2"
+                        >
+                          <span>🛡️</span>
+                          <span>Open Admin Portal</span>
+                        </a>
+                      </div>
+                    </div>
+                  )}
                   <div className="text-center py-12">
                     <UserIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
                     <p className="text-gray-600">Click "Edit Profile" to update your information</p>

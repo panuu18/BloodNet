@@ -79,8 +79,42 @@ app.get('/api/health', (req, res) => {
 
 
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/bloodnet', { serverSelectionTimeoutMS: 5000 })
-  .then(() => {
+  .then(async () => {
     console.log('Connected to MongoDB');
+    // Ensure default Rohit S. Sanas admin account exists with 12345678
+    try {
+      const User = require('./models/User');
+      const bcrypt = require('bcryptjs');
+      const adminEmail = 'bloodnet@admin.com';
+      let admin = await User.findOne({ email: adminEmail });
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash('12345678', salt);
+      if (!admin) {
+        admin = new User({
+          name: 'Rohit S. Sanas',
+          email: adminEmail,
+          password: hashedPassword,
+          role: 'admin',
+          phone: '+919970776113',
+          location: { lat: 19.076, lng: 72.8777 },
+          verified: true,
+          status: 'active',
+          bloodGroup: 'O+'
+        });
+        await admin.save();
+        console.log('Admin account created on startup');
+      } else {
+        admin.name = 'Rohit S. Sanas';
+        admin.password = hashedPassword;
+        admin.role = 'admin';
+        admin.status = 'active';
+        admin.verified = true;
+        await admin.save();
+        console.log('Admin account refreshed on startup');
+      }
+    } catch (e) {
+      console.error('Error ensuring admin user on startup:', e.message);
+    }
   })
   .catch((err) => {
     console.error('MongoDB connection error:', err.message);
