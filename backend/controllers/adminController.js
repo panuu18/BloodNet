@@ -825,7 +825,7 @@ const emergencyBroadcast = async (req, res) => {
     const alertMsg = message || `EMERGENCY BROADCAST: Urgent blood requirement for ${bloodGroup || 'all groups'}`;
     
     const alert = await SystemAlert.create({
-      type: 'critical',
+      type: 'emergency',
       message: alertMsg,
       priority: 'high',
       createdBy: req.user.id
