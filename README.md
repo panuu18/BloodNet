@@ -4,7 +4,7 @@
 [![Repository](https://img.shields.io/badge/GitHub-panuu18%2FBloodNet-blue?style=for-the-badge&logo=github)](https://github.com/panuu18/BloodNet)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
-> 🌐 **Live Website:** [https://bloodnet-plus.vercel.app/](https://bloodnet-plus.vercel.app/)
+> 🌐 **Live Website:** [https://bloodnet-plus-eight.vercel.app/](https://bloodnet-plus-eight.vercel.app/)
 
 ---
 
