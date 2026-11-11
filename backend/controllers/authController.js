@@ -5,9 +5,16 @@ const User = require('../models/User');
 const Notification = require('../models/Notification');
 const AuditLog = require('../models/AuditLog');
 
+const getJwtSecret = () => {
+  if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET environment variable is missing in production!');
+  }
+  return process.env.JWT_SECRET || 'bloodnet_fallback_secret_key_2026';
+};
+
 const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET || 'bloodnet_fallback_secret_key_2026', {
-    expiresIn: '30d',
+  return jwt.sign({ id }, getJwtSecret(), {
+    expiresIn: process.env.JWT_EXPIRES_IN || '30d',
   });
 };
 
@@ -47,7 +54,8 @@ const register = async (req, res) => {
     }
 
     // Hash password before saving
-    const salt = await bcrypt.genSalt(10);
+    const saltRounds = parseInt(process.env.BCRYPT_ROUNDS, 10) || 10;
+    const salt = await bcrypt.genSalt(saltRounds);
     const hashedPassword = await bcrypt.hash(password, salt);
     
     // Add hashed password to user data
