@@ -27,7 +27,8 @@ const respondValidation = [
   body('message').optional().isLength({ max: 500 }).withMessage('Message too long'),
 ];
 
-router.post('/create', auth, authorize('recipient'), createRequestValidation, createRequest);
+router.post('/', auth, authorize('recipient', 'hospital'), createRequestValidation, createRequest);
+router.post('/create', auth, authorize('recipient', 'hospital'), createRequestValidation, createRequest);
 
 router.get('/my', auth, authorize('recipient'), getMyRequests);
 

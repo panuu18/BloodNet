@@ -76,110 +76,103 @@ const createRequest = async (req, res) => {
       console.error('AuditLog request error:', e.message);
     }
 
-    const nearbyDonors = await User.find({
-      role: 'donor',
-      bloodGroup,
-      isAvailable: true,
-      'donorHealthDetails.age': { $gte: 18 },
-      'donorHealthDetails.weight': { $gte: 50 },
-      'donorHealthDetails.hemoglobin': { $gte: 11 }
-    });
+    try {
+      const nearbyDonors = await User.find({
+        role: 'donor',
+        bloodGroup,
+        isAvailable: true,
+        'donorHealthDetails.age': { $gte: 18 },
+        'donorHealthDetails.weight': { $gte: 50 },
+        'donorHealthDetails.hemoglobin': { $gte: 11 }
+      });
 
-    const nearbyHospitals = await User.find({
-      role: 'hospital',
-      location: {
-        $near: {
-          $geometry: {
-            type: 'Point',
-            coordinates: [location.lng, location.lat]
-          },
-          $maxDistance: 50000
+      const nearbyHospitals = await User.find({
+        role: 'hospital'
+      });
+
+      const notifications = [];
+      const hospitalName = user.role === 'hospital' ? user.name : (request.hospitalName || 'Medical Center');
+
+      nearbyDonors.forEach(donor => {
+        if (donor.location && donor.location.lat && donor.location.lng) {
+          const distance = calculateDistance(
+            location.lat, location.lng,
+            donor.location.lat, donor.location.lng
+          );
+
+          if (distance <= 50) {
+            notifications.push({
+              userId: donor._id,
+              title: 'Blood Donation Request',
+              message: `Urgent: ${unitsNeeded} units of ${bloodGroup} blood needed within ${Math.round(distance)}km`,
+              type: 'blood_request',
+              relatedRequestId: request._id,
+              relatedUserId: req.user.id,
+              priority: (urgency === 'emergency' || urgency === 'critical') ? 'urgent' : urgency === 'urgent' ? 'high' : 'medium',
+              actionRequired: true,
+              actionUrl: `/requests/${request._id}`,
+              metadata: { distance, unitsNeeded, bloodGroup }
+            });
+          }
         }
-      }
-    });
+      });
 
-    const notifications = [];
-    const hospitalName = user.role === 'hospital' ? user.name : (request.hospitalName || 'Medical Center');
+      nearbyHospitals.forEach(hospital => {
+        if (hospital.location && hospital.location.lat && hospital.location.lng) {
+          const distance = calculateDistance(
+            location.lat, location.lng,
+            hospital.location.lat, hospital.location.lng
+          );
 
-    nearbyDonors.forEach(donor => {
-      if (donor.location && donor.location.lat && donor.location.lng) {
-        const distance = calculateDistance(
-          location.lat, location.lng,
-          donor.location.lat, donor.location.lng
-        );
-
-        if (distance <= 50) {
-          notifications.push({
-            userId: donor._id,
-            title: 'Blood Donation Request',
-            message: `Urgent: ${unitsNeeded} units of ${bloodGroup} blood needed within ${Math.round(distance)}km`,
-            type: 'blood_request',
-            relatedRequestId: request._id,
-            relatedUserId: req.user.id,
-            priority: (urgency === 'emergency' || urgency === 'critical') ? 'urgent' : urgency === 'urgent' ? 'high' : 'medium',
-            actionRequired: true,
-            actionUrl: `/requests/${request._id}`,
-            metadata: { distance, unitsNeeded, bloodGroup }
-          });
+          if (distance <= 50) {
+            notifications.push({
+              userId: hospital._id,
+              title: 'Blood Request from Nearby',
+              message: `${unitsNeeded} units of ${bloodGroup} blood requested within ${Math.round(distance)}km`,
+              type: 'blood_request',
+              relatedRequestId: request._id,
+              relatedUserId: req.user.id,
+              priority: (urgency === 'emergency' || urgency === 'critical') ? 'urgent' : urgency === 'urgent' ? 'high' : 'medium',
+              actionRequired: true,
+              actionUrl: `/requests/${request._id}`,
+              metadata: { distance, unitsNeeded, bloodGroup, hospitalName }
+            });
+          }
         }
-      }
-    });
+      });
 
-    nearbyHospitals.forEach(hospital => {
-      if (hospital.location && hospital.location.lat && hospital.location.lng) {
-        const distance = calculateDistance(
-          location.lat, location.lng,
-          hospital.location.lat, hospital.location.lng
-        );
-
-        if (distance <= 50) {
-          notifications.push({
-            userId: hospital._id,
-            title: 'Blood Request from Nearby',
-            message: `${unitsNeeded} units of ${bloodGroup} blood requested within ${Math.round(distance)}km`,
-            type: 'blood_request',
-            relatedRequestId: request._id,
-            relatedUserId: req.user.id,
-            priority: (urgency === 'emergency' || urgency === 'critical') ? 'urgent' : urgency === 'urgent' ? 'high' : 'medium',
-            actionRequired: true,
-            actionUrl: `/requests/${request._id}`,
-            metadata: { distance, unitsNeeded, bloodGroup, hospitalName }
-          });
-        }
-      }
-    });
-
-    if (notifications.length > 0) {
-      await Notification.insertMany(notifications);
-      
-      // Broadcast new request to all connected donors and hospitals
-      if (global.connectedUsers && global.io) {
-        const allConnectedUsers = Array.from(global.connectedUsers.keys());
-        if (allConnectedUsers.length > 0) {
-          const connectedDonorsAndHospitals = await User.find({
-            _id: { $in: allConnectedUsers },
-            role: { $in: ['donor', 'hospital'] }
-          });
-          
-          connectedDonorsAndHospitals.forEach(user => {
-            const socketId = global.connectedUsers.get(user._id.toString());
-            if (socketId) {
-              // Send the actual request data for real-time updates
-              global.io.to(socketId).emit('newBloodRequest', {
-                request: request,
-                type: 'new_request',
-                timestamp: new Date()
-              });
-              
-              // Also send notification
-              const userNotification = notifications.find(n => n.userId.toString() === user._id.toString());
-              if (userNotification) {
-                global.io.to(socketId).emit('newNotification', userNotification);
+      if (notifications.length > 0) {
+        await Notification.insertMany(notifications);
+        
+        // Broadcast new request to all connected donors and hospitals
+        if (global.connectedUsers && global.io) {
+          const allConnectedUsers = Array.from(global.connectedUsers.keys());
+          if (allConnectedUsers.length > 0) {
+            const connectedDonorsAndHospitals = await User.find({
+              _id: { $in: allConnectedUsers },
+              role: { $in: ['donor', 'hospital'] }
+            });
+            
+            connectedDonorsAndHospitals.forEach(user => {
+              const socketId = global.connectedUsers.get(user._id.toString());
+              if (socketId) {
+                global.io.to(socketId).emit('newBloodRequest', {
+                  request: request,
+                  type: 'new_request',
+                  timestamp: new Date()
+                });
+                
+                const userNotification = notifications.find(n => n.userId.toString() === user._id.toString());
+                if (userNotification) {
+                  global.io.to(socketId).emit('newNotification', userNotification);
+                }
               }
-            }
-          });
+            });
+          }
         }
       }
+    } catch (notifErr) {
+      console.error('Notification dispatch error (non-fatal):', notifErr.message);
     }
 
     res.status(201).json({ request });
