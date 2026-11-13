@@ -653,11 +653,13 @@ const RevolutionaryDonorDashboard = () => {
                               {request.bloodGroup}
                             </span>
                             <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                              request.urgency === 'emergency' 
+                              request.urgency === 'critical'
+                                ? 'bg-red-600 text-white font-bold animate-pulse'
+                                : request.urgency === 'emergency' 
                                 ? 'bg-orange-100 text-orange-700' 
                                 : 'bg-yellow-100 text-yellow-700'
                             }`}>
-                              {request.urgency}
+                              {request.urgency === 'critical' ? '🚨 Critical' : request.urgency}
                             </span>
                           </div>
                           

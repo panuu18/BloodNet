@@ -16,7 +16,7 @@ const getSystemOverview = async (req, res) => {
     const activeRequests = await Request.countDocuments({ status: 'active' });
     const completedRequests = await Request.countDocuments({ status: 'completed' });
     const pendingRequests = await Request.countDocuments({ status: 'pending' });
-    const emergencyRequests = await Request.countDocuments({ urgency: 'emergency' });
+    const emergencyRequests = await Request.countDocuments({ urgency: { $in: ['emergency', 'critical'] } });
 
     const recentUsers = await User.find()
       .sort({ createdAt: -1 })
@@ -364,7 +364,13 @@ const getAllRequests = async (req, res) => {
 
     let query = {};
     if (status) query.status = status;
-    if (urgency) query.urgency = urgency;
+    if (urgency) {
+      if (urgency === 'emergency') {
+        query.urgency = { $in: ['emergency', 'critical'] };
+      } else {
+        query.urgency = urgency;
+      }
+    }
     if (bloodGroup) query.bloodGroup = bloodGroup;
 
     const requests = await Request.find(query)
@@ -401,7 +407,8 @@ const getRequestStats = async (req, res) => {
       active: await Request.countDocuments({ status: 'active' }),
       completed: await Request.countDocuments({ status: 'completed' }),
       cancelled: await Request.countDocuments({ status: 'cancelled' }),
-      emergency: await Request.countDocuments({ urgency: 'emergency' }),
+      emergency: await Request.countDocuments({ urgency: { $in: ['emergency', 'critical'] } }),
+      critical: await Request.countDocuments({ urgency: 'critical' }),
       urgent: await Request.countDocuments({ urgency: 'urgent' }),
       routine: await Request.countDocuments({ urgency: 'routine' })
     };
@@ -503,7 +510,7 @@ const deleteRequest = async (req, res) => {
 
 const getEmergencyRequests = async (req, res) => {
   try {
-    const requests = await Request.find({ urgency: 'emergency', status: { $in: ['pending', 'active'] } })
+    const requests = await Request.find({ urgency: { $in: ['emergency', 'critical'] }, status: { $in: ['pending', 'active'] } })
       .populate('requesterId', 'name email phone location')
       .populate('hospitalId', 'hospitalName contactNumber location')
       .sort({ createdAt: -1 })

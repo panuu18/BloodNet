@@ -182,12 +182,12 @@ const AdminDashboard = () => {
           patientName: r.recipientName || r.requesterId?.name || 'Emergency Patient',
           bloodGroup: r.bloodGroup || 'O+',
           unitsNeeded: r.unitsNeeded || 1,
-          urgency: r.urgency === 'emergency' ? 'Emergency' : r.urgency === 'urgent' ? 'Urgent' : 'Standard',
+          urgency: r.urgency === 'critical' ? 'Critical' : r.urgency === 'emergency' ? 'Emergency' : r.urgency === 'urgent' ? 'Urgent' : 'Standard',
           hospital: r.hospitalName || r.hospitalId?.hospitalName || 'City Medical Center',
           status: r.status ? r.status.charAt(0).toUpperCase() + r.status.slice(1) : 'Pending',
           date: r.createdAt ? new Date(r.createdAt).toISOString().split('T')[0] : '2026-08-01'
         }));
-        if (liveReqs.length > 0) setRequests(liveReqs);
+        setRequests(liveReqs);
       }
 
       // 4. Process Live Hospitals
@@ -970,10 +970,11 @@ const AdminDashboard = () => {
                           </td>
                           <td className="px-6 py-4">
                             <span className={`px-2.5 py-1 text-xs font-black rounded-full ${
+                              req.urgency === 'Critical' ? 'bg-red-600 text-white animate-pulse shadow-sm font-black' :
                               req.urgency === 'Emergency' ? 'bg-red-100 text-red-700 animate-pulse' :
                               req.urgency === 'Urgent' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-700'
                             }`}>
-                              {req.urgency}
+                              {req.urgency === 'Critical' ? '🚨 Critical' : req.urgency}
                             </span>
                           </td>
                           <td className="px-6 py-4 text-gray-600 text-xs">

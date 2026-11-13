@@ -71,6 +71,7 @@ const createRequest = async (req, res) => {
       });
       if (global.io) {
         global.io.emit('adminUpdate', { type: 'new_request', request });
+        global.io.emit('newBloodRequest', { request, type: 'new_request', timestamp: new Date() });
       }
     } catch (e) {
       console.error('AuditLog request error:', e.message);
@@ -86,61 +87,57 @@ const createRequest = async (req, res) => {
     });
 
     const nearbyHospitals = await User.find({
-      role: 'hospital',
-      location: {
-        $near: {
-          $geometry: {
-            type: 'Point',
-            coordinates: [location.lng, location.lat]
-          },
-          $maxDistance: 50000
+      role: 'hospital'
+    });
+
+    const notifications = [];
+    const hospitalName = user.role === 'hospital' ? user.name : (request.hospitalName || 'Medical Center');
+
+    nearbyDonors.forEach(donor => {
+      if (donor.location && donor.location.lat && donor.location.lng) {
+        const distance = calculateDistance(
+          location.lat, location.lng,
+          donor.location.lat, donor.location.lng
+        );
+
+        if (distance <= 50) {
+          notifications.push({
+            userId: donor._id,
+            title: 'Blood Donation Request',
+            message: `Urgent: ${unitsNeeded} units of ${bloodGroup} blood needed within ${Math.round(distance)}km`,
+            type: 'blood_request',
+            relatedRequestId: request._id,
+            relatedUserId: req.user.id,
+            priority: (urgency === 'critical' || urgency === 'emergency') ? 'urgent' : urgency === 'urgent' ? 'high' : 'medium',
+            actionRequired: true,
+            actionUrl: `/requests/${request._id}`,
+            metadata: { distance, unitsNeeded, bloodGroup }
+          });
         }
       }
     });
 
-    const notifications = [];
-
-    nearbyDonors.forEach(donor => {
-      const distance = calculateDistance(
-        location.lat, location.lng,
-        donor.location.lat, donor.location.lng
-      );
-
-      if (distance <= 50) {
-        notifications.push({
-          userId: donor._id,
-          title: 'Blood Donation Request',
-          message: `Urgent: ${unitsNeeded} units of ${bloodGroup} blood needed within ${Math.round(distance)}km`,
-          type: 'blood_request',
-          relatedRequestId: request._id,
-          relatedUserId: req.user.id,
-          priority: urgency === 'emergency' ? 'urgent' : urgency === 'urgent' ? 'high' : 'medium',
-          actionRequired: true,
-          actionUrl: `/requests/${request._id}`,
-          metadata: { distance, unitsNeeded, bloodGroup }
-        });
-      }
-    });
-
     nearbyHospitals.forEach(hospital => {
-      const distance = calculateDistance(
-        location.lat, location.lng,
-        hospital.location.lat, hospital.location.lng
-      );
+      if (hospital.location && hospital.location.lat && hospital.location.lng) {
+        const distance = calculateDistance(
+          location.lat, location.lng,
+          hospital.location.lat, hospital.location.lng
+        );
 
-      if (distance <= 50) {
-        notifications.push({
-          userId: hospital._id,
-          title: 'Blood Request from Nearby',
-          message: `${unitsNeeded} units of ${bloodGroup} blood requested within ${Math.round(distance)}km`,
-          type: 'blood_request',
-          relatedRequestId: request._id,
-          relatedUserId: req.user.id,
-          priority: urgency === 'emergency' ? 'urgent' : 'medium',
-          actionRequired: true,
-          actionUrl: `/requests/${request._id}`,
-          metadata: { distance, unitsNeeded, bloodGroup, hospitalName }
-        });
+        if (distance <= 50) {
+          notifications.push({
+            userId: hospital._id,
+            title: 'Blood Request from Nearby',
+            message: `${unitsNeeded} units of ${bloodGroup} blood requested within ${Math.round(distance)}km`,
+            type: 'blood_request',
+            relatedRequestId: request._id,
+            relatedUserId: req.user.id,
+            priority: (urgency === 'critical' || urgency === 'emergency') ? 'urgent' : urgency === 'urgent' ? 'high' : 'medium',
+            actionRequired: true,
+            actionUrl: `/requests/${request._id}`,
+            metadata: { distance, unitsNeeded, bloodGroup, hospitalName }
+          });
+        }
       }
     });
 
@@ -148,29 +145,31 @@ const createRequest = async (req, res) => {
       await Notification.insertMany(notifications);
       
       // Broadcast new request to all connected donors and hospitals
-      const allConnectedUsers = Array.from(global.connectedUsers.keys());
-      const connectedDonorsAndHospitals = await User.find({
-        _id: { $in: allConnectedUsers },
-        role: { $in: ['donor', 'hospital'] }
-      });
-      
-      connectedDonorsAndHospitals.forEach(user => {
-        const socketId = global.connectedUsers.get(user._id.toString());
-        if (socketId) {
-          // Send the actual request data for real-time updates
-          global.io.to(socketId).emit('newBloodRequest', {
-            request: request,
-            type: 'new_request',
-            timestamp: new Date()
-          });
-          
-          // Also send notification
-          const userNotification = notifications.find(n => n.userId.toString() === user._id.toString());
-          if (userNotification) {
-            global.io.to(socketId).emit('newNotification', userNotification);
+      if (global.connectedUsers && global.connectedUsers.keys && global.io) {
+        const allConnectedUsers = Array.from(global.connectedUsers.keys());
+        const connectedDonorsAndHospitals = await User.find({
+          _id: { $in: allConnectedUsers },
+          role: { $in: ['donor', 'hospital'] }
+        });
+        
+        connectedDonorsAndHospitals.forEach(u => {
+          const socketId = global.connectedUsers.get(u._id.toString());
+          if (socketId) {
+            // Send the actual request data for real-time updates
+            global.io.to(socketId).emit('newBloodRequest', {
+              request: request,
+              type: 'new_request',
+              timestamp: new Date()
+            });
+            
+            // Also send notification
+            const userNotification = notifications.find(n => n.userId.toString() === u._id.toString());
+            if (userNotification) {
+              global.io.to(socketId).emit('newNotification', userNotification);
+            }
           }
-        }
-      });
+        });
+      }
     }
 
     res.status(201).json({ request });

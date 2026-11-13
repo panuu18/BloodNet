@@ -8,6 +8,7 @@ const badgeVariants = {
     accepted: "bg-green-100 text-green-800 border-green-200",
     rejected: "bg-red-100 text-red-800 border-red-200",
     completed: "bg-blue-100 text-blue-800 border-blue-200",
+    critical: "bg-red-600 text-white border-red-700 animate-pulse font-bold",
     emergency: "bg-red-500 text-white border-red-600",
     urgent: "bg-orange-500 text-white border-orange-600",
     normal: "bg-gray-100 text-gray-800 border-gray-200",
@@ -85,6 +86,7 @@ export const BloodGroupBadge = ({ bloodGroup, size = "md", className }) => {
 export const UrgencyBadge = ({ urgency, size = "md", className }) => {
   const getUrgencyText = (urgency) => {
     switch (urgency) {
+      case 'critical': return '🚨 Critical';
       case 'emergency': return '🚨 Emergency';
       case 'urgent': return '⚡ Urgent';
       case 'normal': return 'Normal';
