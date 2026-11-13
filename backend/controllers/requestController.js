@@ -3,6 +3,7 @@ const Request = require('../models/Request');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const BloodInventory = require('../models/BloodInventory');
+const InventoryLog = require('../models/InventoryLog');
 const AuditLog = require('../models/AuditLog');
 
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -258,6 +259,85 @@ const respondToRequest = async (req, res) => {
       return res.status(400).json({ message: 'You have already responded to this request' });
     }
 
+    if (response === 'accepted') {
+      if (req.user.role === 'hospital') {
+        const bloodGroup = request.bloodGroup;
+        const unitsNeeded = request.unitsNeeded || 1;
+
+        // 1. Initial stock availability check
+        const currentStock = await BloodInventory.findOne({
+          hospitalId: req.user.id,
+          bloodGroup
+        });
+
+        const availableUnits = currentStock ? currentStock.unitsAvailable : 0;
+
+        if (availableUnits < unitsNeeded) {
+          return res.status(409).json({
+            error: 'INSUFFICIENT_STOCK',
+            code: 'INSUFFICIENT_STOCK',
+            message: `Not enough ${bloodGroup} stock is available to fulfill this request.`,
+            availableUnits,
+            requestedUnits: unitsNeeded,
+            bloodGroup
+          });
+        }
+
+        // 2. Atomic decrement with safety check to prevent simultaneous race conditions
+        const updatedInventory = await BloodInventory.findOneAndUpdate(
+          {
+            hospitalId: req.user.id,
+            bloodGroup,
+            unitsAvailable: { $gte: unitsNeeded }
+          },
+          {
+            $inc: { unitsAvailable: -unitsNeeded },
+            $set: { lastUpdated: new Date() }
+          },
+          { new: true }
+        );
+
+        if (!updatedInventory) {
+          const freshStock = await BloodInventory.findOne({
+            hospitalId: req.user.id,
+            bloodGroup
+          });
+          return res.status(409).json({
+            error: 'INSUFFICIENT_STOCK',
+            code: 'INSUFFICIENT_STOCK',
+            message: `Not enough ${bloodGroup} stock is available to fulfill this request.`,
+            availableUnits: freshStock ? freshStock.unitsAvailable : 0,
+            requestedUnits: unitsNeeded,
+            bloodGroup
+          });
+        }
+
+        // 3. Record in InventoryLog
+        try {
+          await InventoryLog.create({
+            hospitalId: req.user.id,
+            bloodGroup,
+            operation: 'fulfilled_request',
+            units: unitsNeeded,
+            previousUnits: updatedInventory.unitsAvailable + unitsNeeded,
+            newUnits: updatedInventory.unitsAvailable,
+            reason: `Fulfilled blood request #${request._id}`,
+            performedBy: req.user.id,
+            relatedRequestId: request._id
+          });
+        } catch (logErr) {
+          console.error('InventoryLog create error:', logErr.message);
+        }
+
+        request.hospitalId = req.user.id;
+        request.responseDate = new Date();
+      } else if (req.user.role === 'donor') {
+        request.donorId = req.user.id;
+        request.responseDate = new Date();
+      }
+      request.status = 'accepted';
+    }
+
     request.responses.push({
       responderId: req.user.id,
       responderType: req.user.role,
@@ -266,26 +346,17 @@ const respondToRequest = async (req, res) => {
       timestamp: new Date()
     });
 
-    if (response === 'accepted') {
-      if (req.user.role === 'donor') {
-        request.donorId = req.user.id;
-      } else if (req.user.role === 'hospital') {
-        request.hospitalId = req.user.id;
-      }
-      request.status = 'accepted';
-    }
-
     await request.save();
 
     try {
       await AuditLog.create({
-        action: 'request_created',
+        action: 'request_status_updated',
         userId: req.user.id,
         requestId: request._id,
-        details: `Blood request created for ${bloodGroup} (${unitsNeeded} units) - Urgency: ${urgency}`
+        details: `Request #${request._id} response recorded (${response}) by ${req.user.role} ${req.user.name || req.user.id}`
       });
       if (global.io) {
-        global.io.emit('adminUpdate', { type: 'new_request', request });
+        global.io.emit('adminUpdate', { type: 'request_updated', request });
       }
     } catch (e) {
       console.error('AuditLog request error:', e.message);
@@ -302,24 +373,16 @@ const respondToRequest = async (req, res) => {
       actionRequired: false
     });
 
-    const requesterSocketId = global.connectedUsers.get(request.requesterId.toString());
-    if (requesterSocketId) {
-      global.io.to(requesterSocketId).emit('requestUpdate', {
-        requestId: request._id,
-        status: request.status,
-        responder: req.user
-      });
+    if (global.connectedUsers && global.io) {
+      const requesterSocketId = global.connectedUsers.get(request.requesterId.toString());
+      if (requesterSocketId) {
+        global.io.to(requesterSocketId).emit('requestUpdate', {
+          requestId: request._id,
+          status: request.status,
+          responder: req.user
+        });
+      }
     }
-
-    try {
-      await AuditLog.create({
-        action: 'request_status_updated',
-        userId: req.user.id,
-        requestId: request._id,
-        details: `Request response recorded (${status}) by user ${req.user.name || req.user.id}`
-      });
-      if (global.io) global.io.emit('adminUpdate', { type: 'request', id: request._id });
-    } catch (e) { console.error('AuditLog error:', e.message); }
 
     res.json({ request });
   } catch (error) {

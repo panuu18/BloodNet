@@ -52,10 +52,10 @@ const MobileHospitalDashboard = () => {
         hospitalAPI.getRequestHistory()
       ]);
 
-      setInventory(inventoryRes.data || []);
-      setBloodRequests(requestsRes.data || []);
-      setStats(statsRes.data || {});
-      setRequestHistory(historyRes.data || []);
+      setInventory(inventoryRes.data?.inventory || inventoryRes.data || []);
+      setBloodRequests(requestsRes.data?.requests || requestsRes.data || []);
+      setStats(statsRes.data?.stats || statsRes.data || {});
+      setRequestHistory(historyRes.data?.history || historyRes.data || []);
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
     } finally {
@@ -66,62 +66,41 @@ const MobileHospitalDashboard = () => {
   const handleRequestResponse = async (requestId, response) => {
     try {
       await requestAPI.respondToRequest(requestId, { response });
-      
-      // Update local state
-      setBloodRequests(prev => 
-        prev.map(req => 
-          req._id === requestId 
-            ? { ...req, status: response, responseDate: new Date() }
-            : req
-        )
-      );
-
-      // Update inventory if accepted
-      if (response === 'accepted') {
-        const request = bloodRequests.find(req => req._id === requestId);
-        if (request) {
-          setInventory(prev =>
-            prev.map(item =>
-              item.bloodGroup === request.bloodGroup
-                ? { ...item, unitsAvailable: Math.max(0, item.unitsAvailable - request.unitsNeeded) }
-                : item
-            )
-          );
-        }
-      }
-
-      // Update stats
-      if (stats) {
-        setStats(prev => ({
-          ...prev,
-          pendingRequests: Math.max(0, prev.pendingRequests - 1),
-          completedRequests: prev.completedRequests + 1
-        }));
-      }
+      await fetchDashboardData();
     } catch (error) {
       console.error('Failed to respond to request:', error);
+      if (error.response?.status === 409 && error.response?.data?.code === 'INSUFFICIENT_STOCK') {
+        alert(error.response.data.message || 'Not enough stock is available to fulfill this request.');
+      } else {
+        alert(error.response?.data?.message || 'Failed to process request.');
+      }
     }
   };
 
   const handleInventoryUpdate = async (bloodGroup, operation, units) => {
     try {
-      console.log('Mobile - Updating inventory:', { bloodGroup, operation, units });
       await hospitalAPI.updateInventory({ bloodGroup, operation, unitsAvailable: units });
-      
-      // Immediately refetch inventory data to get the updated values from backend
-      const inventoryResponse = await hospitalAPI.getHospitalInventory();
-      console.log('Mobile - Fetched inventory:', inventoryResponse.data);
-      setInventory(inventoryResponse.data.inventory || []);
-      
+      await fetchDashboardData();
       setEditingItem(null);
       setEditValue('');
     } catch (error) {
       console.error('Mobile - Failed to update inventory:', error);
+      alert(error.response?.data?.message || 'Failed to update inventory');
     }
   };
 
+  const getCriticalStockAlerts = () => {
+    return inventory.filter(item => {
+      const min = item.minThreshold || 5;
+      return item.unitsAvailable === 0 || item.unitsAvailable <= Math.floor(min / 2);
+    });
+  };
+
   const getLowStockAlerts = () => {
-    return inventory.filter(item => item.unitsAvailable <= item.minThreshold);
+    return inventory.filter(item => {
+      const min = item.minThreshold || 5;
+      return item.unitsAvailable > Math.floor(min / 2) && item.unitsAvailable <= min;
+    });
   };
 
   const getStockStatus = (available, minThreshold) => {
@@ -144,7 +123,7 @@ const MobileHospitalDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-teal-50 pb-20">
+    <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-teal-50 pb-32">
       {/* Animated Background */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <motion.div
@@ -250,17 +229,18 @@ const MobileHospitalDashboard = () => {
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Overview</h2>
               <div className="flex space-x-4 overflow-x-auto pb-2">
                 {[
-                  { label: 'Total Blood', value: stats?.totalBloodUnits || 0, icon: '🩸', color: 'red' },
-                  { label: 'Active Requests', value: filteredRequests.length, icon: '📩', color: 'blue' },
-                  { label: 'Low Stock', value: getLowStockAlerts().length, icon: '⚠️', color: 'yellow' },
-                  { label: 'Handled Today', value: stats?.completedRequests || 0, icon: '✅', color: 'green' }
+                  { label: 'Total Blood', value: stats?.totalBloodUnits ?? inventory.reduce((s, i) => s + (i.unitsAvailable || 0), 0), icon: '🩸', color: 'red' },
+                  { label: 'Active Requests', value: stats?.activeRequests ?? bloodRequests.filter(r => r.status === 'pending' || r.status === 'active').length, icon: '📩', color: 'blue' },
+                  { label: 'Handled Today', value: stats?.requestsHandledToday ?? 0, icon: '✅', color: 'green' },
+                  { label: 'Critical Stock', value: getCriticalStockAlerts().length, icon: '🚨', color: 'red' },
+                  { label: 'Low Stock', value: getLowStockAlerts().length, icon: '⚠️', color: 'yellow' }
                 ].map((stat, index) => (
                   <motion.div
                     key={index}
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.1 }}
-                    className="flex-shrink-0 w-40 bg-white rounded-xl p-4 shadow-sm border border-gray-200"
+                    className="flex-shrink-0 w-36 bg-white rounded-xl p-4 shadow-sm border border-gray-200"
                   >
                     <div className="text-center">
                       <div className="text-2xl mb-2">{stat.icon}</div>
@@ -272,27 +252,60 @@ const MobileHospitalDashboard = () => {
               </div>
             </div>
 
-            {/* Critical Alerts */}
-            {getLowStockAlerts().length > 0 && (
+            {/* Critical Stock Alerts */}
+            {getCriticalStockAlerts().length > 0 && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-red-50 rounded-xl p-4 border border-red-200"
+                className="bg-red-50 rounded-xl p-4 border border-red-300"
               >
-                <h3 className="text-lg font-semibold text-red-900 mb-3">⚠️ Critical Alerts</h3>
+                <h3 className="text-lg font-semibold text-red-900 mb-3 flex items-center gap-2">
+                  <span>🚨</span> Critical / Out of Stock
+                </h3>
                 <div className="space-y-2">
-                  {getLowStockAlerts().map((item, index) => (
+                  {getCriticalStockAlerts().map((item, index) => (
                     <div key={index} className="bg-white rounded-lg p-3 border border-red-200">
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="font-semibold text-red-900">{item.bloodGroup} Blood</p>
-                          <p className="text-sm text-red-700">
-                            {item.unitsAvailable === 0 ? 'Out of stock' : 'Critically low'}
+                          <p className="text-xs text-red-700 font-medium">
+                            {item.unitsAvailable === 0 ? '❌ Out of stock (0 units)' : `🚨 Critically low (${item.unitsAvailable} left)`}
                           </p>
                         </div>
                         <div className="text-right">
                           <p className="text-xl font-bold text-red-600">{item.unitsAvailable}</p>
                           <p className="text-xs text-red-600">units left</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+
+            {/* Low Stock Warnings */}
+            {getLowStockAlerts().length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-amber-50 rounded-xl p-4 border border-amber-300"
+              >
+                <h3 className="text-lg font-semibold text-amber-900 mb-3 flex items-center gap-2">
+                  <span>⚠️</span> Low Stock Warnings
+                </h3>
+                <div className="space-y-2">
+                  {getLowStockAlerts().map((item, index) => (
+                    <div key={index} className="bg-white rounded-lg p-3 border border-amber-200">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-semibold text-amber-900">{item.bloodGroup} Blood</p>
+                          <p className="text-xs text-amber-700">
+                            Below threshold ({item.unitsAvailable} / min {item.minThreshold || 5})
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xl font-bold text-amber-600">{item.unitsAvailable}</p>
+                          <p className="text-xs text-amber-600">units</p>
                         </div>
                       </div>
                     </div>

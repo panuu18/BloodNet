@@ -1,10 +1,13 @@
 const { validationResult } = require('express-validator');
 const User = require('../models/User');
 const BloodInventory = require('../models/BloodInventory');
+const InventoryLog = require('../models/InventoryLog');
 const Request = require('../models/Request');
 const Notification = require('../models/Notification');
 const DonationCamp = require('../models/DonationCamp');
 const AuditLog = require('../models/AuditLog');
+
+const ALL_BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
   const R = 6371;
@@ -31,6 +34,9 @@ const getNearbyHospitals = async (req, res) => {
     }).select('-password');
 
     const nearbyHospitals = hospitals.filter(hospital => {
+      if (!hospital.location || hospital.location.lat === undefined || hospital.location.lng === undefined) {
+        return false;
+      }
       const distance = calculateDistance(
         parseFloat(lat), parseFloat(lng),
         hospital.location.lat, hospital.location.lng
@@ -54,19 +60,40 @@ const getHospitalInventory = async (req, res) => {
       return res.status(403).json({ message: 'Only hospitals can view their inventory' });
     }
 
-    const inventory = await BloodInventory.find({ hospitalId: req.user.id })
+    const inventoryRecords = await BloodInventory.find({ hospitalId: req.user.id })
       .sort({ bloodGroup: 1 });
 
-    const bloodGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
-    const completeInventory = bloodGroups.map(group => {
-      const item = inventory.find(item => item.bloodGroup === group);
-      return item || {
+    const completeInventory = ALL_BLOOD_GROUPS.map(group => {
+      const item = inventoryRecords.find(i => i.bloodGroup === group);
+      const units = item ? item.unitsAvailable : 0;
+      const minThreshold = item?.minThreshold || 5;
+      const maxCapacity = item?.maxCapacity || 100;
+      
+      let status = 'good';
+      let statusText = 'Good Stock';
+      if (units === 0) {
+        status = 'critical';
+        statusText = 'Out of Stock';
+      } else if (units <= Math.floor(minThreshold / 2)) {
+        status = 'critical';
+        statusText = 'Critical Stock';
+      } else if (units <= minThreshold) {
+        status = 'low';
+        statusText = 'Low Stock';
+      }
+
+      return {
+        _id: item?._id,
         hospitalId: req.user.id,
         bloodGroup: group,
-        unitsAvailable: 0,
-        minThreshold: 5,
-        maxCapacity: 100,
-        expiryDates: []
+        unitsAvailable: units,
+        minThreshold,
+        maxCapacity,
+        status,
+        statusText,
+        percentage: Math.min(100, Math.round((units / maxCapacity) * 100)),
+        lastUpdated: item?.lastUpdated || new Date(),
+        expiryDates: item?.expiryDates || []
       };
     });
 
@@ -88,83 +115,139 @@ const updateInventory = async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { bloodGroup, unitsAvailable, operation, expiryDates, minThreshold, maxCapacity } = req.body;
+    const { bloodGroup, unitsAvailable, operation = 'set', reason = '', minThreshold, maxCapacity } = req.body;
+    const units = parseInt(unitsAvailable, 10);
 
-    let inventory = await BloodInventory.findOne({
+    if (isNaN(units) || units < 0) {
+      return res.status(400).json({ message: 'Units must be a non-negative integer.' });
+    }
+
+    // Retrieve current stock
+    let currentDoc = await BloodInventory.findOne({
       hospitalId: req.user.id,
       bloodGroup
     });
 
-    if (!inventory) {
-      inventory = new BloodInventory({
-        hospitalId: req.user.id,
-        bloodGroup,
-        unitsAvailable: 0,
-        minThreshold: minThreshold || 5,
-        maxCapacity: maxCapacity || 100
-      });
-    }
+    const previousUnits = currentDoc ? currentDoc.unitsAvailable : 0;
+    let newUnits = previousUnits;
 
-    if (operation === 'add' && unitsAvailable > 0) {
-      inventory.unitsAvailable += unitsAvailable;
-      
-      if (expiryDates && expiryDates.length > 0) {
-        expiryDates.forEach(expiry => {
-          inventory.expiryDates.push({
-            units: expiry.units,
-            expiryDate: new Date(expiry.expiryDate),
-            batchNumber: expiry.batchNumber || `BATCH-${Date.now()}`
-          });
+    if (operation === 'add') {
+      newUnits = previousUnits + units;
+      currentDoc = await BloodInventory.findOneAndUpdate(
+        { hospitalId: req.user.id, bloodGroup },
+        {
+          $inc: { unitsAvailable: units },
+          $set: {
+            lastUpdated: new Date(),
+            ...(minThreshold !== undefined ? { minThreshold } : {}),
+            ...(maxCapacity !== undefined ? { maxCapacity } : {})
+          },
+          $setOnInsert: {
+            minThreshold: minThreshold || 5,
+            maxCapacity: maxCapacity || 100,
+            expiryDates: []
+          }
+        },
+        { new: true, upsert: true }
+      );
+    } else if (operation === 'subtract') {
+      if (previousUnits < units) {
+        return res.status(400).json({
+          message: `Cannot subtract ${units} units. Only ${previousUnits} units of ${bloodGroup} are currently in stock.`
         });
       }
-    } else if (operation === 'subtract' && unitsAvailable > 0) {
-      inventory.unitsAvailable = Math.max(0, inventory.unitsAvailable - unitsAvailable);
-      
-      if (expiryDates && expiryDates.length > 0) {
-        expiryDates.forEach(expiry => {
-          const existingExpiry = inventory.expiryDates.find(
-            e => e.batchNumber === expiry.batchNumber
-          );
-          if (existingExpiry) {
-            existingExpiry.units = Math.max(0, existingExpiry.units - expiry.units);
+      newUnits = previousUnits - units;
+      // Atomic deduction with safety guard
+      currentDoc = await BloodInventory.findOneAndUpdate(
+        {
+          hospitalId: req.user.id,
+          bloodGroup,
+          unitsAvailable: { $gte: units }
+        },
+        {
+          $inc: { unitsAvailable: -units },
+          $set: {
+            lastUpdated: new Date(),
+            ...(minThreshold !== undefined ? { minThreshold } : {}),
+            ...(maxCapacity !== undefined ? { maxCapacity } : {})
           }
+        },
+        { new: true }
+      );
+
+      if (!currentDoc) {
+        return res.status(409).json({
+          message: `Inventory conflict: stock changed during update. Please refresh and try again.`
         });
       }
     } else if (operation === 'set') {
-      inventory.unitsAvailable = unitsAvailable;
+      newUnits = units;
+      currentDoc = await BloodInventory.findOneAndUpdate(
+        { hospitalId: req.user.id, bloodGroup },
+        {
+          $set: {
+            unitsAvailable: units,
+            lastUpdated: new Date(),
+            ...(minThreshold !== undefined ? { minThreshold } : {}),
+            ...(maxCapacity !== undefined ? { maxCapacity } : {})
+          },
+          $setOnInsert: {
+            minThreshold: minThreshold || 5,
+            maxCapacity: maxCapacity || 100,
+            expiryDates: []
+          }
+        },
+        { new: true, upsert: true }
+      );
     }
 
-    if (minThreshold !== undefined) inventory.minThreshold = minThreshold;
-    if (maxCapacity !== undefined) inventory.maxCapacity = maxCapacity;
+    // Record change in InventoryLog
+    try {
+      await InventoryLog.create({
+        hospitalId: req.user.id,
+        bloodGroup,
+        operation,
+        units,
+        previousUnits,
+        newUnits: currentDoc.unitsAvailable,
+        reason: reason || `Manual inventory update: ${operation} ${units} units`,
+        performedBy: req.user.id
+      });
+    } catch (logErr) {
+      console.error('InventoryLog creation error:', logErr.message);
+    }
 
-    await inventory.save();
-
+    // Record audit log
     try {
       await AuditLog.create({
         action: 'hospital_updated',
         userId: req.user.id,
-        details: `Hospital inventory updated: ${bloodGroup} (${inventory.unitsAvailable} units available)`
+        details: `Hospital inventory updated: ${bloodGroup} ${operation} ${units} units (now: ${currentDoc.unitsAvailable})`
       });
       if (global.io) {
         global.io.emit('adminUpdate', { type: 'inventory_update', hospitalId: req.user.id });
+        global.io.emit('inventoryUpdate', { hospitalId: req.user.id, bloodGroup, unitsAvailable: currentDoc.unitsAvailable });
       }
     } catch (e) {
       console.error('AuditLog error:', e.message);
     }
 
-    if (inventory.isLowStock()) {
-      await Notification.create({
-        userId: req.user.id,
-        title: 'Low Blood Stock Alert',
-        message: `${bloodGroup} blood stock is running low. Current units: ${inventory.unitsAvailable}`,
-        type: 'system',
-        priority: 'high',
-        actionRequired: true,
-        actionUrl: '/inventory'
-      });
+    // Check low stock alert
+    if (currentDoc.unitsAvailable <= (currentDoc.minThreshold || 5)) {
+      try {
+        await Notification.create({
+          userId: req.user.id,
+          title: currentDoc.unitsAvailable === 0 ? 'CRITICAL: Blood Stock Exhausted' : 'Low Blood Stock Alert',
+          message: `${bloodGroup} blood stock is ${currentDoc.unitsAvailable === 0 ? 'completely out of stock' : 'running low'}. Current units: ${currentDoc.unitsAvailable}`,
+          type: 'system',
+          priority: currentDoc.unitsAvailable === 0 ? 'urgent' : 'high',
+          actionRequired: true,
+          actionUrl: '/dashboard/hospital'
+        });
+      } catch (e) {}
     }
 
-    res.json({ inventory });
+    res.json({ inventory: currentDoc, message: 'Inventory updated successfully' });
   } catch (error) {
     console.error('Update inventory error:', error);
     res.status(500).json({ message: 'Server error updating inventory' });
@@ -177,13 +260,32 @@ const getAllBloodRequests = async (req, res) => {
       return res.status(403).json({ message: 'Only hospitals can view blood requests' });
     }
 
-    const requests = await Request.find({
-      status: { $in: ['pending', 'accepted'] }
-    })
-    .populate('requesterId', 'name phone location')
-    .populate('donorId', 'name phone location')
-    .populate('hospitalId', 'hospitalName contactNumber location')
-    .sort({ createdAt: -1 });
+    const { status, urgency, bloodGroup } = req.query;
+    let query = {};
+
+    if (status && status !== 'all') {
+      query.status = status;
+    } else {
+      query.status = { $in: ['pending', 'active', 'accepted', 'fulfilled'] };
+    }
+
+    if (urgency && urgency !== 'all') {
+      if (urgency === 'critical' || urgency === 'emergency') {
+        query.urgency = { $in: ['critical', 'emergency'] };
+      } else {
+        query.urgency = urgency;
+      }
+    }
+
+    if (bloodGroup && bloodGroup !== 'all') {
+      query.bloodGroup = bloodGroup;
+    }
+
+    const requests = await Request.find(query)
+      .populate('requesterId', 'name email phone location')
+      .populate('donorId', 'name email phone location')
+      .populate('hospitalId', 'hospitalName contactNumber location')
+      .sort({ createdAt: -1 });
 
     res.json({ requests });
   } catch (error) {
@@ -198,37 +300,94 @@ const getHospitalStats = async (req, res) => {
       return res.status(403).json({ message: 'Only hospitals can view stats' });
     }
 
+    // 1. Total blood units across all 8 blood groups
     const inventory = await BloodInventory.find({ hospitalId: req.user.id });
-    const totalUnits = inventory.reduce((sum, item) => sum + item.unitsAvailable, 0);
-    
-    const lowStockItems = inventory.filter(item => item.isLowStock());
-    const expiringItems = inventory.filter(item => item.getTotalExpiringUnits(7) > 0);
+    const totalBloodUnits = inventory.reduce((sum, item) => sum + (item.unitsAvailable || 0), 0);
 
-    const requests = await Request.find({ hospitalId: req.user.id });
-    const completedRequests = requests.filter(r => r.status === 'completed').length;
-    const pendingRequests = requests.filter(r => r.status === 'pending').length;
-    const acceptedRequests = requests.filter(r => r.status === 'accepted').length;
+    // 2. Low stock vs Critical stock groups
+    const criticalStockItems = [];
+    const lowStockItems = [];
+    const expiringItems = [];
+
+    ALL_BLOOD_GROUPS.forEach(group => {
+      const item = inventory.find(i => i.bloodGroup === group);
+      const units = item ? item.unitsAvailable : 0;
+      const minThreshold = item?.minThreshold || 5;
+
+      if (units === 0 || units <= Math.floor(minThreshold / 2)) {
+        criticalStockItems.push({
+          bloodGroup: group,
+          unitsAvailable: units,
+          minThreshold,
+          severity: units === 0 ? 'Out of Stock' : 'Critically Low'
+        });
+      } else if (units <= minThreshold) {
+        lowStockItems.push({
+          bloodGroup: group,
+          unitsAvailable: units,
+          minThreshold,
+          severity: 'Low Stock'
+        });
+      }
+
+      if (item && item.getTotalExpiringUnits && item.getTotalExpiringUnits(7) > 0) {
+        expiringItems.push({
+          bloodGroup: group,
+          expiringUnits: item.getTotalExpiringUnits(7)
+        });
+      }
+    });
+
+    // 3. Active requests: Requests currently awaiting hospital action or in progress
+    // Existing project statuses: 'pending', 'active'
+    const activeRequests = await Request.countDocuments({
+      status: { $in: ['pending', 'active'] }
+    });
+
+    // 4. Requests handled today: Accepted, fulfilled, or completed today (IST date convention)
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const requestsHandledToday = await Request.countDocuments({
+      hospitalId: req.user.id,
+      status: { $in: ['accepted', 'fulfilled', 'completed'] },
+      $or: [
+        { responseDate: { $gte: startOfDay } },
+        { updatedAt: { $gte: startOfDay } }
+      ]
+    });
+
+    // Hospital-specific historical counts
+    const completedRequests = await Request.countDocuments({
+      hospitalId: req.user.id,
+      status: { $in: ['completed', 'fulfilled'] }
+    });
+
+    const acceptedRequests = await Request.countDocuments({
+      hospitalId: req.user.id,
+      status: 'accepted'
+    });
+
+    const totalHandledRequests = await Request.countDocuments({
+      hospitalId: req.user.id
+    });
 
     res.json({
       stats: {
-        totalBloodUnits: totalUnits,
+        totalBloodUnits,
+        activeRequests,
+        requestsHandledToday,
         lowStockCount: lowStockItems.length,
+        criticalStockCount: criticalStockItems.length,
         expiringSoonCount: expiringItems.length,
         completedRequests,
-        pendingRequests,
         acceptedRequests,
-        totalRequests: requests.length
+        totalRequests: totalHandledRequests
       },
       alerts: {
-        lowStockItems: lowStockItems.map(item => ({
-          bloodGroup: item.bloodGroup,
-          unitsAvailable: item.unitsAvailable,
-          minThreshold: item.minThreshold
-        })),
-        expiringItems: expiringItems.map(item => ({
-          bloodGroup: item.bloodGroup,
-          expiringUnits: item.getTotalExpiringUnits(7)
-        }))
+        criticalStockItems,
+        lowStockItems,
+        expiringItems
       }
     });
   } catch (error) {
@@ -243,26 +402,39 @@ const getRequestHistory = async (req, res) => {
       return res.status(403).json({ message: 'Only hospitals can view request history' });
     }
 
-    const requests = await Request.find({ hospitalId: req.user.id })
-      .populate('requesterId', 'name phone location')
-      .populate('donorId', 'name phone location')
-      .sort({ createdAt: -1 });
+    const { status, urgency, bloodGroup } = req.query;
+    let query = { hospitalId: req.user.id };
+
+    if (status && status !== 'all') {
+      query.status = status;
+    }
+    if (urgency && urgency !== 'all') {
+      query.urgency = urgency;
+    }
+    if (bloodGroup && bloodGroup !== 'all') {
+      query.bloodGroup = bloodGroup;
+    }
+
+    const requests = await Request.find(query)
+      .populate('requesterId', 'name phone location email')
+      .populate('donorId', 'name phone location email')
+      .sort({ updatedAt: -1, createdAt: -1 });
 
     const history = requests.map(request => ({
       _id: request._id,
-      recipientName: request.requesterId?.name || 'Unknown',
+      recipientName: request.recipientName || request.requesterId?.name || 'Patient',
       recipientAge: request.recipientAge || 'N/A',
       bloodGroup: request.bloodGroup,
       unitsNeeded: request.unitsNeeded,
-      medicalReason: request.medicalReason,
+      medicalReason: request.medicalReason || 'Emergency requirement',
       urgency: request.urgency,
       status: request.status,
       hospitalName: request.hospitalName || req.user.hospitalName,
       location: request.location,
-      contactPerson: request.contactPerson,
-      contactPhone: request.contactPhone,
+      contactPerson: request.contactPerson || request.requesterId?.name || '',
+      contactPhone: request.contactPhone || request.requesterId?.phone || '',
       createdAt: request.createdAt,
-      responseDate: request.responseDate
+      responseDate: request.responseDate || request.updatedAt
     }));
 
     res.json({ history });
@@ -291,23 +463,22 @@ const createDonationCamp = async (req, res) => {
       date: new Date(date),
       location,
       description,
-      targetUnits,
+      targetUnits: parseInt(targetUnits, 10) || 50,
       status: 'upcoming'
     });
 
     await camp.save();
 
-    // Create notification for successful camp creation
     await Notification.create({
       userId: req.user.id,
       title: 'Donation Camp Created',
-      message: `Your donation camp "${name}" has been successfully created for ${new Date(date).toLocaleDateString()}`,
+      message: `Your donation camp "${name}" has been successfully scheduled for ${new Date(date).toLocaleDateString()}`,
       type: 'system',
       priority: 'medium',
       actionRequired: false
     });
 
-    res.status(201).json({ camp });
+    res.status(201).json({ camp, message: 'Donation camp created successfully' });
   } catch (error) {
     console.error('Create donation camp error:', error);
     res.status(500).json({ message: 'Server error creating donation camp' });
@@ -325,9 +496,14 @@ const updateHospitalProfile = async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const updates = req.body;
-    
-    // Update user profile
+    const { hospitalName, contactNumber, address, emergencyContact, location } = req.body;
+    const updates = {};
+    if (hospitalName) updates.hospitalName = hospitalName;
+    if (contactNumber) updates.contactNumber = contactNumber;
+    if (address) updates.address = address;
+    if (emergencyContact) updates.emergencyContact = emergencyContact;
+    if (location) updates.location = location;
+
     const updatedUser = await User.findByIdAndUpdate(
       req.user.id,
       { $set: updates },
@@ -348,46 +524,6 @@ const updateHospitalProfile = async (req, res) => {
   }
 };
 
-const generateExcelReport = async (req, res) => {
-  try {
-    if (req.user.role !== 'hospital') {
-      return res.status(403).json({ message: 'Only hospitals can generate reports' });
-    }
-
-    const inventory = await BloodInventory.find({ hospitalId: req.user.id });
-    const requests = await Request.find({ hospitalId: req.user.id });
-
-    // Create Excel report data
-    const reportData = {
-      hospitalName: req.user.hospitalName,
-      generatedDate: new Date().toISOString(),
-      inventory: inventory.map(item => ({
-        bloodGroup: item.bloodGroup,
-        unitsAvailable: item.unitsAvailable,
-        minThreshold: item.minThreshold,
-        maxCapacity: item.maxCapacity,
-        status: item.isLowStock() ? 'Low Stock' : 'Good Stock'
-      })),
-      requests: requests.map(request => ({
-        recipientName: request.requesterId?.name || 'Unknown',
-        bloodGroup: request.bloodGroup,
-        unitsNeeded: request.unitsNeeded,
-        status: request.status,
-        createdAt: request.createdAt,
-        responseDate: request.responseDate
-      }))
-    };
-
-    // For now, return JSON data. In production, you'd use a library like exceljs
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Content-Disposition', `attachment; filename=blood-inventory-report-${new Date().toISOString().split('T')[0]}.json`);
-    res.json(reportData);
-  } catch (error) {
-    console.error('Generate Excel report error:', error);
-    res.status(500).json({ message: 'Server error generating report' });
-  }
-};
-
 const getInventoryReport = async (req, res) => {
   try {
     if (req.user.role !== 'hospital') {
@@ -396,7 +532,7 @@ const getInventoryReport = async (req, res) => {
 
     const { dateRange = 'week', bloodGroup = 'all', reportType = 'comprehensive' } = req.query;
     
-    // Calculate date range
+    // Calculate accurate date range filter
     const now = new Date();
     let startDate = new Date();
     
@@ -417,29 +553,98 @@ const getInventoryReport = async (req, res) => {
         startDate.setDate(now.getDate() - 7);
     }
 
-    // Fetch inventory data
+    // 1. Fetch real current inventory data
     let inventoryQuery = { hospitalId: req.user.id };
     if (bloodGroup !== 'all') {
       inventoryQuery.bloodGroup = bloodGroup;
     }
     
-    const inventory = await BloodInventory.find(inventoryQuery);
-    
-    // Fetch requests within date range
+    const inventoryRecords = await BloodInventory.find(inventoryQuery);
+
+    const completeInventory = (bloodGroup === 'all' ? ALL_BLOOD_GROUPS : [bloodGroup]).map(group => {
+      const item = inventoryRecords.find(i => i.bloodGroup === group);
+      const units = item ? item.unitsAvailable : 0;
+      const minThreshold = item?.minThreshold || 5;
+      const maxCapacity = item?.maxCapacity || 100;
+      return {
+        bloodGroup: group,
+        unitsAvailable: units,
+        minThreshold,
+        maxCapacity,
+        status: units === 0 ? 'Out of Stock' : (units <= minThreshold ? 'Low Stock' : 'Good Stock'),
+        severity: units === 0 ? 'Critical' : (units <= minThreshold ? 'Low' : 'Good')
+      };
+    });
+
+    const totalUnits = completeInventory.reduce((sum, item) => sum + item.unitsAvailable, 0);
+
+    // 2. Fetch real requests handled by or for this hospital in the date range
     let requestQuery = { 
       hospitalId: req.user.id,
       createdAt: { $gte: startDate, $lte: now }
     };
+    if (bloodGroup !== 'all') {
+      requestQuery.bloodGroup = bloodGroup;
+    }
     
     const requests = await Request.find(requestQuery)
-      .populate('requesterId', 'name')
+      .populate('requesterId', 'name phone')
       .sort({ createdAt: -1 });
 
-    // Calculate activity log (mock data for now - in production, this would come from activity tracking)
-    const activityLog = generateMockActivityLog(inventory, requests, startDate, now);
-    
-    // Calculate low stock alerts
-    const lowStockAlerts = inventory
+    // 3. Fetch real inventory logs within date range
+    let logQuery = {
+      hospitalId: req.user.id,
+      createdAt: { $gte: startDate, $lte: now }
+    };
+    if (bloodGroup !== 'all') {
+      logQuery.bloodGroup = bloodGroup;
+    }
+
+    const inventoryLogs = await InventoryLog.find(logQuery)
+      .sort({ createdAt: -1 })
+      .limit(50);
+
+    // Build 100% REAL activity log from InventoryLog and Request transactions
+    const activityLog = [];
+
+    inventoryLogs.forEach(log => {
+      activityLog.push({
+        id: log._id,
+        date: log.createdAt,
+        bloodGroup: log.bloodGroup,
+        operation: log.operation,
+        units: log.units,
+        previousUnits: log.previousUnits,
+        newUnits: log.newUnits,
+        activityType: log.operation === 'add' ? 'Stock Added' :
+                      log.operation === 'subtract' ? 'Stock Reduced' :
+                      log.operation === 'fulfilled_request' ? 'Request Fulfilled' : 'Stock Adjusted',
+        notes: log.reason || `${log.operation} ${log.units} units of ${log.bloodGroup}`
+      });
+    });
+
+    // If there are accepted requests not yet in logs, add them to activity log
+    requests.forEach(reqDoc => {
+      if (reqDoc.status === 'accepted' || reqDoc.status === 'fulfilled' || reqDoc.status === 'completed') {
+        const alreadyInLog = activityLog.some(a => a.notes?.includes(reqDoc._id.toString()));
+        if (!alreadyInLog) {
+          activityLog.push({
+            id: reqDoc._id,
+            date: reqDoc.responseDate || reqDoc.updatedAt || reqDoc.createdAt,
+            bloodGroup: reqDoc.bloodGroup,
+            operation: 'fulfilled_request',
+            units: reqDoc.unitsNeeded,
+            activityType: 'Blood Request Fulfilled',
+            notes: `Supplied ${reqDoc.unitsNeeded} units to ${reqDoc.recipientName || reqDoc.requesterId?.name || 'Patient'}`
+          });
+        }
+      }
+    });
+
+    activityLog.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    // 4. Calculate real low stock alerts
+    const lowStockAlerts = completeInventory
       .filter(item => item.unitsAvailable <= item.minThreshold)
       .map(item => ({
         bloodGroup: item.bloodGroup,
@@ -447,40 +652,44 @@ const getInventoryReport = async (req, res) => {
         minThreshold: item.minThreshold,
         severity: item.unitsAvailable === 0 ? 'Critical' : 'Low',
         message: item.unitsAvailable === 0 
-          ? `${item.bloodGroup} is out of stock` 
-          : `${item.bloodGroup} is critically low`,
+          ? `${item.bloodGroup} is completely out of stock` 
+          : `${item.bloodGroup} is below the minimum threshold (${item.minThreshold} units)`,
         recommendedAction: item.unitsAvailable === 0 
-          ? 'Immediate restocking required' 
-          : 'Consider restocking soon'
+          ? 'Immediate restocking or emergency donor drive required' 
+          : 'Plan donation camp or donor requests soon'
       }));
 
-    // Calculate request summary
+    // 5. Calculate real request summary
+    const acceptedRequestsList = requests.filter(r => r.status === 'accepted' || r.status === 'fulfilled' || r.status === 'completed');
+    const unitsSupplied = acceptedRequestsList.reduce((sum, r) => sum + (r.unitsNeeded || 1), 0);
+
+    const respondedRequests = requests.filter(r => r.responseDate);
+    let avgResponseTime = 'N/A';
+    if (respondedRequests.length > 0) {
+      const totalMs = respondedRequests.reduce((sum, r) => sum + (new Date(r.responseDate) - new Date(r.createdAt)), 0);
+      const avgMs = totalMs / respondedRequests.length;
+      const hours = Math.floor(avgMs / (1000 * 60 * 60));
+      const mins = Math.floor((avgMs % (1000 * 60 * 60)) / (1000 * 60));
+      avgResponseTime = `${hours}h ${mins}m`;
+    }
+
     const requestSummary = {
       totalReceived: requests.length,
-      accepted: requests.filter(r => r.status === 'accepted').length,
-      rejected: requests.filter(r => r.status === 'rejected').length,
-      unitsSupplied: requests.filter(r => r.status === 'accepted').reduce((sum, r) => sum + r.unitsNeeded, 0),
-      avgResponseTime: calculateAverageResponseTime(requests)
+      accepted: acceptedRequestsList.length,
+      rejected: requests.filter(r => r.status === 'rejected' || r.status === 'cancelled').length,
+      pending: requests.filter(r => r.status === 'pending').length,
+      unitsSupplied,
+      avgResponseTime
     };
 
-    // Calculate total units
-    const totalUnits = inventory.reduce((sum, item) => sum + item.unitsAvailable, 0);
-
-    // Enhanced inventory data with stock movement
-    const enhancedInventory = inventory.map(item => ({
-      ...item.toObject(),
-      unitsAdded: Math.floor(Math.random() * 20) + 5, // Mock data - would come from activity tracking
-      unitsUsed: Math.floor(Math.random() * 15) + 2, // Mock data - would come from activity tracking
-    }));
-
     const reportData = {
-      hospitalName: req.user.hospitalName,
+      hospitalName: req.user.hospitalName || 'Hospital',
       generatedDate: new Date().toISOString(),
       dateRange,
       bloodGroup,
       reportType,
       totalUnits,
-      inventory: enhancedInventory,
+      inventory: completeInventory,
       lowStockAlerts,
       activityLog,
       requestSummary,
@@ -498,55 +707,48 @@ const getInventoryReport = async (req, res) => {
   }
 };
 
-// Helper function to generate mock activity log
-const generateMockActivityLog = (inventory, requests, startDate, endDate) => {
-  const activities = [];
-  
-  // Generate some mock activities based on requests
-  requests.slice(0, 10).forEach(request => {
-    activities.push({
-      date: request.createdAt,
-      bloodGroup: request.bloodGroup,
-      unitsAdded: 0,
-      unitsUsed: request.status === 'accepted' ? request.unitsNeeded : 0,
-      activityType: request.status === 'accepted' ? 'Blood Request Fulfilled' : 'Blood Request Received',
-      notes: `Request from ${request.requesterId?.name || 'Unknown'}`
-    });
-  });
-
-  // Add some mock inventory additions
-  inventory.forEach(item => {
-    if (Math.random() > 0.5) {
-      const randomDate = new Date(startDate.getTime() + Math.random() * (endDate.getTime() - startDate.getTime()));
-      activities.push({
-        date: randomDate,
-        bloodGroup: item.bloodGroup,
-        unitsAdded: Math.floor(Math.random() * 20) + 5,
-        unitsUsed: 0,
-        activityType: 'Stock Added',
-        notes: 'Regular blood donation'
-      });
+const generateExcelReport = async (req, res) => {
+  try {
+    if (req.user.role !== 'hospital') {
+      return res.status(403).json({ message: 'Only hospitals can generate reports' });
     }
-  });
 
-  return activities.sort((a, b) => new Date(b.date) - new Date(a.date));
-};
+    const inventory = await BloodInventory.find({ hospitalId: req.user.id });
+    const requests = await Request.find({ hospitalId: req.user.id }).populate('requesterId', 'name phone');
 
-// Helper function to calculate average response time
-const calculateAverageResponseTime = (requests) => {
-  const respondedRequests = requests.filter(r => r.responseDate);
-  if (respondedRequests.length === 0) return 'N/A';
-  
-  const totalResponseTime = respondedRequests.reduce((sum, request) => {
-    const responseTime = new Date(request.responseDate) - new Date(request.createdAt);
-    return sum + responseTime;
-  }, 0);
-  
-  const avgResponseTime = totalResponseTime / respondedRequests.length;
-  const hours = Math.floor(avgResponseTime / (1000 * 60 * 60));
-  const minutes = Math.floor((avgResponseTime % (1000 * 60 * 60)) / (1000 * 60));
-  
-  return `${hours}h ${minutes}m`;
+    const reportData = {
+      hospitalName: req.user.hospitalName || 'Hospital',
+      generatedDate: new Date().toISOString(),
+      inventory: ALL_BLOOD_GROUPS.map(group => {
+        const item = inventory.find(i => i.bloodGroup === group);
+        const units = item ? item.unitsAvailable : 0;
+        const minThreshold = item?.minThreshold || 5;
+        const maxCapacity = item?.maxCapacity || 100;
+        return {
+          bloodGroup: group,
+          unitsAvailable: units,
+          minThreshold,
+          maxCapacity,
+          status: units === 0 ? 'Out of Stock' : units <= minThreshold ? 'Low Stock' : 'Good Stock'
+        };
+      }),
+      requests: requests.map(r => ({
+        id: r._id,
+        recipientName: r.recipientName || r.requesterId?.name || 'Patient',
+        bloodGroup: r.bloodGroup,
+        unitsNeeded: r.unitsNeeded,
+        urgency: r.urgency,
+        status: r.status,
+        createdAt: r.createdAt,
+        responseDate: r.responseDate
+      }))
+    };
+
+    res.json(reportData);
+  } catch (error) {
+    console.error('Generate Excel report error:', error);
+    res.status(500).json({ message: 'Server error generating report' });
+  }
 };
 
 module.exports = {

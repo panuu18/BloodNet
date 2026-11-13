@@ -11,18 +11,20 @@ import {
   ExclamationTriangleIcon,
   CheckCircleIcon,
   BuildingOfficeIcon,
-  UserCircleIcon,
   XMarkIcon,
-  FunnelIcon
+  FunnelIcon,
+  ArrowPathIcon
 } from '@heroicons/react/24/outline';
 
 const SimpleHospitalReports = () => {
   const { user } = useAuth();
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showFilters, setShowFilters] = useState(false);
   const [timePeriod, setTimePeriod] = useState('week');
   const [showShareModal, setShowShareModal] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   useEffect(() => {
     fetchReportData();
@@ -31,46 +33,69 @@ const SimpleHospitalReports = () => {
   const fetchReportData = async () => {
     try {
       setLoading(true);
+      setError(null);
       const response = await hospitalAPI.getInventoryReport({ dateRange: timePeriod });
       setReportData(response.data);
-    } catch (error) {
-      console.error('Failed to fetch report data:', error);
+    } catch (err) {
+      console.error('Failed to fetch report data:', err);
+      setError('Unable to load report data from the database. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const downloadReport = async () => {
+  const downloadReport = () => {
     try {
-      // Create simple Excel report
+      if (!reportData) return;
+
       const wb = XLSX.utils.book_new();
 
-      // Simple summary sheet
+      // Summary sheet
       const summaryData = [
-        { 'What': 'Hospital Name', 'Details': user?.hospitalName || 'Hospital' },
-        { 'What': 'Report Date', 'Details': new Date().toLocaleDateString() },
-        { 'What': 'Time Period', 'Details': getTimePeriodLabel(timePeriod) },
-        { 'What': 'Total Blood Available', 'Details': `${reportData?.totalUnits || 0} units` },
-        { 'What': 'Blood Requests Today', 'Details': `${reportData?.requestSummary?.totalReceived || 0} requests` },
-        { 'What': 'People Helped Today', 'Details': `${reportData?.requestSummary?.accepted || 0} patients` }
+        { 'Metric': 'Hospital Name', 'Value': user?.hospitalName || reportData.hospitalName || 'Hospital' },
+        { 'Metric': 'Report Date', 'Value': new Date().toLocaleDateString() },
+        { 'Metric': 'Time Period', 'Value': getTimePeriodLabel(timePeriod) },
+        { 'Metric': 'Total Available Blood Units', 'Value': `${reportData.totalUnits || 0} units` },
+        { 'Metric': 'Blood Requests Received', 'Value': `${reportData.requestSummary?.totalReceived || 0}` },
+        { 'Metric': 'Blood Requests Accepted', 'Value': `${reportData.requestSummary?.accepted || 0}` },
+        { 'Metric': 'Total Units Supplied to Patients', 'Value': `${reportData.requestSummary?.unitsSupplied || 0} units` },
+        { 'Metric': 'Low Stock Blood Groups', 'Value': `${reportData.lowStockAlerts?.length || 0}` }
       ];
       const wsSummary = XLSX.utils.json_to_sheet(summaryData);
       XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
 
-      // Blood availability sheet
-      const bloodData = reportData?.inventory?.map(item => ({
-        'Blood Type': item.bloodGroup,
+      // Blood Inventory sheet
+      const bloodData = (reportData.inventory || []).map(item => ({
+        'Blood Group': item.bloodGroup,
         'Available Units': item.unitsAvailable,
-        'Status': getSimpleStatus(item.unitsAvailable, item.minThreshold),
-        'Good For': getBloodTypeInfo(item.bloodGroup)
-      })) || [];
+        'Minimum Threshold': item.minThreshold,
+        'Maximum Capacity': item.maxCapacity,
+        'Status': item.status || (item.unitsAvailable === 0 ? 'Out of Stock' : item.unitsAvailable <= item.minThreshold ? 'Low Stock' : 'Good Stock')
+      }));
       const wsBlood = XLSX.utils.json_to_sheet(bloodData);
-      XLSX.utils.book_append_sheet(wb, wsBlood, 'Blood Types');
+      XLSX.utils.book_append_sheet(wb, wsBlood, 'Inventory Stock');
 
-      XLSX.writeFile(wb, `blood-report-${new Date().toISOString().split('T')[0]}.xlsx`);
-    } catch (error) {
-      console.error('Download failed:', error);
+      // Activity Log sheet
+      const activityData = (reportData.activityLog || []).map(act => ({
+        'Date': new Date(act.date).toLocaleDateString() + ' ' + new Date(act.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        'Blood Group': act.bloodGroup,
+        'Activity Type': act.activityType,
+        'Units': act.units,
+        'Notes': act.notes || ''
+      }));
+      const wsActivity = XLSX.utils.json_to_sheet(activityData.length > 0 ? activityData : [{ 'Status': 'No activity recorded in this period' }]);
+      XLSX.utils.book_append_sheet(wb, wsActivity, 'Activity Log');
+
+      XLSX.writeFile(wb, `hospital-blood-report-${new Date().toISOString().split('T')[0]}.xlsx`);
+    } catch (err) {
+      console.error('Download report error:', err);
     }
+  };
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(window.location.href);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2500);
   };
 
   const getTimePeriodLabel = (period) => {
@@ -81,12 +106,6 @@ const SimpleHospitalReports = () => {
       year: 'Last 12 months'
     };
     return labels[period] || 'Last 7 days';
-  };
-
-  const getSimpleStatus = (available, minThreshold) => {
-    if (available === 0) return '❌ Out of Stock';
-    if (available <= minThreshold) return '⚠️ Low Stock';
-    return '✅ Available';
   };
 
   const getBloodTypeInfo = (bloodGroup) => {
@@ -105,46 +124,61 @@ const SimpleHospitalReports = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-red-500 border-t-transparent mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading your blood report...</p>
-        </div>
+      <div className="flex flex-col items-center justify-center h-64 bg-white rounded-xl shadow-sm border border-gray-200">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-red-500 border-t-transparent mb-4"></div>
+        <p className="text-gray-600 font-medium">Loading verified database report...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 rounded-xl p-8 border border-red-200 text-center space-y-4">
+        <ExclamationTriangleIcon className="h-12 w-12 text-red-600 mx-auto" />
+        <h3 className="text-lg font-bold text-red-900">Failed to Load Report</h3>
+        <p className="text-red-700 text-sm">{error}</p>
+        <button
+          onClick={fetchReportData}
+          className="inline-flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
+        >
+          <ArrowPathIcon className="h-4 w-4" />
+          <span>Retry</span>
+        </button>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Simple Header */}
+      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="bg-white rounded-xl shadow-sm p-6 border border-gray-200"
       >
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Blood Bank Report</h1>
-            <p className="text-gray-600 mt-1">Easy-to-understand blood availability report</p>
+            <h1 className="text-2xl font-bold text-gray-900">Hospital Blood & Inventory Report</h1>
+            <p className="text-gray-600 mt-1">Live data generated from hospital inventory and patient requests</p>
           </div>
-          <div className="flex items-center space-x-3">
+          <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
             >
               <FunnelIcon className="h-4 w-4" />
-              <span>Time Period</span>
+              <span>{getTimePeriodLabel(timePeriod)}</span>
             </button>
             <button
               onClick={downloadReport}
-              className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium shadow-sm"
             >
               <DocumentArrowDownIcon className="h-4 w-4" />
-              <span>Download Report</span>
+              <span>Download Excel</span>
             </button>
             <button
               onClick={() => setShowShareModal(true)}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium shadow-sm"
             >
               <ShareIcon className="h-4 w-4" />
               <span>Share</span>
@@ -152,26 +186,36 @@ const SimpleHospitalReports = () => {
           </div>
         </div>
 
-        {/* Hospital Info */}
-        <div className="bg-blue-50 rounded-lg p-4">
-          <div className="flex items-center space-x-3">
-            <BuildingOfficeIcon className="h-5 w-5 text-blue-600" />
-            <div>
-              <p className="font-semibold text-blue-900">{user?.hospitalName || 'Hospital'}</p>
-              <p className="text-sm text-blue-700">Report for {getTimePeriodLabel(timePeriod)}</p>
+        {/* Hospital Info Banner */}
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-100">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <BuildingOfficeIcon className="h-6 w-6 text-blue-600" />
+              <div>
+                <p className="font-bold text-blue-950 text-base">{user?.hospitalName || reportData?.hospitalName || 'Medical Center'}</p>
+                <p className="text-xs text-blue-700">Reporting Period: {getTimePeriodLabel(timePeriod)} • Generated: {new Date().toLocaleTimeString()}</p>
+              </div>
             </div>
+            <span className="hidden sm:inline-block px-3 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-full">
+              Live Database
+            </span>
           </div>
         </div>
       </motion.div>
 
-      {/* Simple Filters */}
+      {/* Time Period Filter Panel */}
       {showFilters && (
         <motion.div
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
           className="bg-white rounded-xl shadow-sm p-6 border border-gray-200"
         >
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Choose Time Period</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Select Reporting Time Window</h3>
+            <button onClick={() => setShowFilters(false)} className="text-gray-400 hover:text-gray-600">
+              <XMarkIcon className="h-5 w-5" />
+            </button>
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
               { value: 'week', label: 'Last 7 days' },
@@ -181,10 +225,13 @@ const SimpleHospitalReports = () => {
             ].map((option) => (
               <button
                 key={option.value}
-                onClick={() => setTimePeriod(option.value)}
-                className={`px-4 py-2 rounded-lg transition-colors ${
+                onClick={() => {
+                  setTimePeriod(option.value);
+                  setShowFilters(false);
+                }}
+                className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition-all ${
                   timePeriod === option.value
-                    ? 'bg-red-600 text-white'
+                    ? 'bg-red-600 text-white shadow-md'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
@@ -195,21 +242,23 @@ const SimpleHospitalReports = () => {
         </motion.div>
       )}
 
-      {/* Simple Summary Cards */}
-      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* Summary Cards */}
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
           className="bg-white rounded-xl shadow-sm p-6 border border-gray-200"
         >
-          <div className="text-center">
-            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <HeartIcon className="h-8 w-8 text-red-600" />
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-gray-500">Total Blood Available</p>
+              <p className="text-3xl font-black text-red-600 mt-2">{reportData?.totalUnits || 0}</p>
+              <p className="text-xs text-gray-400 mt-1">units across 8 groups</p>
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Total Blood Available</h3>
-            <p className="text-3xl font-bold text-red-600">{reportData?.totalUnits || 0}</p>
-            <p className="text-sm text-gray-600 mt-1">units ready to save lives</p>
+            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-red-600">
+              <HeartIcon className="h-6 w-6" />
+            </div>
           </div>
         </motion.div>
 
@@ -219,13 +268,15 @@ const SimpleHospitalReports = () => {
           transition={{ delay: 0.2 }}
           className="bg-white rounded-xl shadow-sm p-6 border border-gray-200"
         >
-          <div className="text-center">
-            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CalendarIcon className="h-8 w-8 text-blue-600" />
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-gray-500">Incoming Requests</p>
+              <p className="text-3xl font-black text-blue-600 mt-2">{reportData?.requestSummary?.totalReceived || 0}</p>
+              <p className="text-xs text-gray-400 mt-1">in selected period</p>
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Blood Requests</h3>
-            <p className="text-3xl font-bold text-blue-600">{reportData?.requestSummary?.totalReceived || 0}</p>
-            <p className="text-sm text-gray-600 mt-1">people need blood</p>
+            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-600">
+              <CalendarIcon className="h-6 w-6" />
+            </div>
           </div>
         </motion.div>
 
@@ -235,13 +286,15 @@ const SimpleHospitalReports = () => {
           transition={{ delay: 0.3 }}
           className="bg-white rounded-xl shadow-sm p-6 border border-gray-200"
         >
-          <div className="text-center">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircleIcon className="h-8 w-8 text-green-600" />
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-gray-500">Units Supplied</p>
+              <p className="text-3xl font-black text-green-600 mt-2">{reportData?.requestSummary?.unitsSupplied || 0}</p>
+              <p className="text-xs text-gray-400 mt-1">{reportData?.requestSummary?.accepted || 0} requests fulfilled</p>
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">People Helped</h3>
-            <p className="text-3xl font-bold text-green-600">{reportData?.requestSummary?.accepted || 0}</p>
-            <p className="text-sm text-gray-600 mt-1">lives saved today</p>
+            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center text-green-600">
+              <CheckCircleIcon className="h-6 w-6" />
+            </div>
           </div>
         </motion.div>
 
@@ -251,78 +304,91 @@ const SimpleHospitalReports = () => {
           transition={{ delay: 0.4 }}
           className="bg-white rounded-xl shadow-sm p-6 border border-gray-200"
         >
-          <div className="text-center">
-            <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <ExclamationTriangleIcon className="h-8 w-8 text-yellow-600" />
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-gray-500">Low/Critical Groups</p>
+              <p className="text-3xl font-black text-amber-600 mt-2">{reportData?.lowStockAlerts?.length || 0}</p>
+              <p className="text-xs text-gray-400 mt-1">blood types need attention</p>
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Low Stock Alert</h3>
-            <p className="text-3xl font-bold text-yellow-600">{reportData?.lowStockAlerts?.length || 0}</p>
-            <p className="text-sm text-gray-600 mt-1">types need more blood</p>
+            <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center text-amber-600">
+              <ExclamationTriangleIcon className="h-6 w-6" />
+            </div>
           </div>
         </motion.div>
       </div>
 
-      {/* Simple Blood Type Availability */}
+      {/* Blood Group Inventory Breakdown (8 Groups) */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.5 }}
         className="bg-white rounded-xl shadow-sm p-6 border border-gray-200"
       >
-        <h2 className="text-xl font-bold text-gray-900 mb-6">Blood Type Availability</h2>
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {reportData?.inventory?.map((item) => (
-            <div key={item.bloodGroup} className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors">
-              <div className="text-center">
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-white mx-auto mb-3 ${
-                  item.unitsAvailable === 0 ? 'bg-red-500' :
-                  item.unitsAvailable <= item.minThreshold ? 'bg-yellow-500' :
-                  'bg-green-500'
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-bold text-gray-900">Current Stock by Blood Group</h2>
+          <span className="text-xs text-gray-500">Real-time availability</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+          {(reportData?.inventory || []).map((item) => {
+            const isZero = item.unitsAvailable === 0;
+            const isLow = item.unitsAvailable <= item.minThreshold && !isZero;
+            return (
+              <div
+                key={item.bloodGroup}
+                className={`rounded-xl p-3 text-center border transition-all ${
+                  isZero ? 'bg-red-50 border-red-200' :
+                  isLow ? 'bg-amber-50 border-amber-200' :
+                  'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                }`}
+              >
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black mx-auto mb-2 text-sm ${
+                  isZero ? 'bg-red-600 text-white' :
+                  isLow ? 'bg-amber-500 text-white' :
+                  'bg-teal-600 text-white'
                 }`}>
                   {item.bloodGroup}
                 </div>
-                <h3 className="font-semibold text-gray-900 mb-1">{item.bloodGroup} Blood</h3>
-                <p className="text-2xl font-bold text-gray-800 mb-2">{item.unitsAvailable}</p>
-                <p className="text-sm text-gray-600 mb-2">units available</p>
-                <div className="text-xs text-gray-500">
-                  <p className="font-medium">Good for:</p>
-                  <p>{getBloodTypeInfo(item.bloodGroup)}</p>
-                </div>
+                <p className="text-xl font-black text-gray-900">{item.unitsAvailable}</p>
+                <p className="text-xs text-gray-500 font-medium">units</p>
+                <span className={`inline-block mt-2 px-1.5 py-0.5 text-[10px] font-bold rounded ${
+                  isZero ? 'bg-red-100 text-red-700' :
+                  isLow ? 'bg-amber-100 text-amber-700' :
+                  'bg-green-100 text-green-700'
+                }`}>
+                  {item.status}
+                </span>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </motion.div>
 
-      {/* Simple Low Stock Warnings */}
+      {/* Low & Critical Stock Alerts */}
       {reportData?.lowStockAlerts?.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6 }}
           className="bg-red-50 rounded-xl p-6 border border-red-200"
         >
-          <h2 className="text-xl font-bold text-red-900 mb-4 flex items-center">
-            <ExclamationTriangleIcon className="h-6 w-6 mr-2" />
-            Need More Blood!
-          </h2>
-          <div className="space-y-3">
+          <div className="flex items-center space-x-2 text-red-900 mb-4">
+            <ExclamationTriangleIcon className="h-6 w-6 text-red-600" />
+            <h2 className="text-lg font-bold">Stock Alerts ({reportData.lowStockAlerts.length})</h2>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {reportData.lowStockAlerts.map((alert, index) => (
-              <div key={index} className="bg-white rounded-lg p-4 border border-red-200">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center font-bold text-red-600">
-                      {alert.bloodGroup}
-                    </div>
-                    <div>
-                      <p className="font-semibold text-red-900">{alert.bloodGroup} Blood Type</p>
-                      <p className="text-red-700">{alert.message}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-2xl font-bold text-red-600">{alert.currentUnits}</p>
-                    <p className="text-sm text-red-600">units left</p>
-                  </div>
+              <div key={index} className="bg-white rounded-lg p-4 border border-red-200 shadow-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-lg font-black text-gray-900">{alert.bloodGroup}</span>
+                  <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${
+                    alert.severity === 'Critical' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-amber-100 text-amber-700'
+                  }`}>
+                    {alert.severity === 'Critical' ? '🚨 OUT OF STOCK' : '⚠️ LOW STOCK'}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-600">{alert.message}</p>
+                <div className="mt-3 flex items-center justify-between text-xs">
+                  <span className="text-gray-500">Available: <strong className="text-red-600">{alert.currentUnits}</strong> units</span>
+                  <span className="text-gray-400">Min: {alert.minThreshold}</span>
                 </div>
               </div>
             ))}
@@ -330,78 +396,113 @@ const SimpleHospitalReports = () => {
         </motion.div>
       )}
 
-      {/* Simple Activity Summary */}
+      {/* Real Activity & Transaction Log */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.7 }}
-        className="bg-white rounded-xl shadow-sm p-6 border border-gray-200"
+        className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden"
       >
-        <h2 className="text-xl font-bold text-gray-900 mb-6">What Happened This Week</h2>
-        <div className="grid md:grid-cols-2 gap-6">
-          <div className="bg-green-50 rounded-lg p-4">
-            <h3 className="font-semibold text-green-900 mb-3">Good News 🎉</h3>
-            <ul className="space-y-2 text-green-800">
-              <li className="flex items-center">
-                <CheckCircleIcon className="h-4 w-4 mr-2 text-green-600" />
-                {reportData?.requestSummary?.accepted || 0} people received blood
-              </li>
-              <li className="flex items-center">
-                <CheckCircleIcon className="h-4 w-4 mr-2 text-green-600" />
-                {reportData?.totalUnits || 0} units are available to help
-              </li>
-              <li className="flex items-center">
-                <CheckCircleIcon className="h-4 w-4 mr-2 text-green-600" />
-                Blood bank is ready for emergencies
-              </li>
-            </ul>
+        <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">Recorded Activity & Movement Log</h2>
+            <p className="text-xs text-gray-500 mt-1">Real inventory updates and requests fulfilled by this hospital</p>
           </div>
-          
-          <div className="bg-blue-50 rounded-lg p-4">
-            <h3 className="font-semibold text-blue-900 mb-3">Blood Types Info 🩸</h3>
-            <ul className="space-y-2 text-blue-800 text-sm">
-              <li><strong>O-</strong> can give blood to anyone (Universal Donor)</li>
-              <li><strong>AB+</strong> can receive blood from anyone (Universal Recipient)</li>
-              <li><strong>O+</strong> is the most common blood type</li>
-              <li><strong>AB-</strong> is the rarest blood type</li>
-            </ul>
-          </div>
+          <span className="px-3 py-1 bg-gray-100 text-gray-700 text-xs font-semibold rounded-full">
+            {reportData?.activityLog?.length || 0} Events
+          </span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 text-sm">
+            <thead className="bg-gray-50 text-xs font-bold text-gray-500 uppercase tracking-wider text-left">
+              <tr>
+                <th className="px-6 py-3">Timestamp</th>
+                <th className="px-6 py-3">Blood Group</th>
+                <th className="px-6 py-3">Event Type</th>
+                <th className="px-6 py-3">Units</th>
+                <th className="px-6 py-3">Details / Notes</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {(!reportData?.activityLog || reportData.activityLog.length === 0) ? (
+                <tr>
+                  <td colSpan="5" className="px-6 py-8 text-center text-gray-400">
+                    No activity recorded for the selected time window.
+                  </td>
+                </tr>
+              ) : (
+                reportData.activityLog.map((item, idx) => (
+                  <tr key={item.id || idx} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-3.5 text-gray-500 text-xs whitespace-nowrap">
+                      {new Date(item.date).toLocaleDateString()} {new Date(item.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </td>
+                    <td className="px-6 py-3.5 font-bold text-gray-900">
+                      {item.bloodGroup}
+                    </td>
+                    <td className="px-6 py-3.5 whitespace-nowrap">
+                      <span className={`px-2.5 py-1 text-xs font-semibold rounded-full ${
+                        item.activityType === 'Stock Added' ? 'bg-green-100 text-green-700' :
+                        item.activityType === 'Stock Reduced' ? 'bg-amber-100 text-amber-700' :
+                        item.activityType === 'Blood Request Fulfilled' || item.activityType === 'Request Fulfilled' ? 'bg-blue-100 text-blue-700' :
+                        'bg-gray-100 text-gray-700'
+                      }`}>
+                        {item.activityType}
+                      </span>
+                    </td>
+                    <td className="px-6 py-3.5 font-bold text-gray-900">
+                      {item.units} units
+                    </td>
+                    <td className="px-6 py-3.5 text-gray-600 text-xs">
+                      {item.notes}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </motion.div>
 
-      {/* Simple Share Modal */}
+      {/* Share Modal */}
       {showShareModal && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto"
           onClick={() => setShowShareModal(false)}
         >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-xl p-6 max-w-md w-full mx-4"
+          <div
+            className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Share Blood Report</h3>
-            <div className="space-y-3">
-              <button className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                <ShareIcon className="h-4 w-4" />
-                <span>Copy Link to Share</span>
-              </button>
-              <button className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
-                <DocumentArrowDownIcon className="h-4 w-4" />
-                <span>Download and Share</span>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900">Share Report</h3>
+              <button onClick={() => setShowShareModal(false)} className="text-gray-400 hover:text-gray-600">
+                <XMarkIcon className="h-5 w-5" />
               </button>
             </div>
-            <button
-              onClick={() => setShowShareModal(false)}
-              className="mt-4 w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              Cancel
-            </button>
-          </motion.div>
-        </motion.div>
+            <p className="text-sm text-gray-600 mb-6">
+              Share the current live report or download an Excel spreadsheet for record-keeping.
+            </p>
+            <div className="space-y-3">
+              <button
+                onClick={handleCopyLink}
+                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-blue-600 text-white font-medium rounded-xl hover:bg-blue-700 transition-colors"
+              >
+                <ShareIcon className="h-5 w-5" />
+                <span>{copiedLink ? 'Link Copied to Clipboard!' : 'Copy Dashboard Link'}</span>
+              </button>
+              <button
+                onClick={() => {
+                  downloadReport();
+                  setShowShareModal(false);
+                }}
+                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-green-600 text-white font-medium rounded-xl hover:bg-green-700 transition-colors"
+              >
+                <DocumentArrowDownIcon className="h-5 w-5" />
+                <span>Export & Download Excel</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
