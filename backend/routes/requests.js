@@ -17,7 +17,7 @@ const createRequestValidation = [
   body('location.lat').optional().isFloat({ min: -90, max: 90 }).withMessage('Invalid latitude'),
   body('location.lng').optional().isFloat({ min: -180, max: 180 }).withMessage('Invalid longitude'),
   body('location.address').notEmpty().withMessage('Address is required'),
-  body('urgency').isIn(['normal', 'urgent', 'emergency', 'critical']).withMessage('Invalid urgency level'),
+  body('urgency').isIn(['normal', 'urgent', 'emergency', 'critical', 'routine']).withMessage('Invalid urgency level'),
   body('unitsNeeded').isInt({ min: 1, max: 10 }).withMessage('Units needed must be between 1 and 10'),
   body('notes').optional().isLength({ max: 500 }).withMessage('Message too long'),
 ];

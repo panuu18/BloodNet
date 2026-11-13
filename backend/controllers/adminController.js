@@ -408,9 +408,8 @@ const getRequestStats = async (req, res) => {
       completed: await Request.countDocuments({ status: 'completed' }),
       cancelled: await Request.countDocuments({ status: 'cancelled' }),
       emergency: await Request.countDocuments({ urgency: { $in: ['emergency', 'critical'] } }),
-      critical: await Request.countDocuments({ urgency: 'critical' }),
       urgent: await Request.countDocuments({ urgency: 'urgent' }),
-      routine: await Request.countDocuments({ urgency: 'routine' })
+      routine: await Request.countDocuments({ urgency: { $in: ['routine', 'normal'] } })
     };
 
     // Get request trends over time

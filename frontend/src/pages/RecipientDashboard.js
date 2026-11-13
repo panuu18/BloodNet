@@ -123,8 +123,7 @@ const RequestForm = ({ onSubmit }) => {
           >
             <option value="normal">Normal</option>
             <option value="urgent">Urgent</option>
-            <option value="emergency">Emergency</option>
-            <option value="critical">🚨 Critical</option>
+            <option value="critical">Critical</option>
           </select>
         </div>
 
@@ -447,11 +446,16 @@ const RecipientDashboard = () => {
                                   {request.bloodGroup}
                                 </span>
                                 <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${
-                                  request.urgency === 'critical' ? 'bg-red-600 text-white animate-pulse' :
-                                  request.urgency === 'emergency' ? 'bg-orange-100 text-orange-800' :
+                                  (request.urgency === 'critical' || request.urgency === 'emergency') ? 'bg-red-600 text-white animate-pulse' :
                                   request.urgency === 'urgent' ? 'bg-amber-100 text-amber-800' :
                                   'bg-gray-100 text-gray-800'
-                                }`}>{request.urgency === 'critical' ? '🚨 Critical' : request.urgency}</span>
+                                }`}>{request.urgency === 'critical' || request.urgency === 'emergency' ? `🚨 ${(request.urgency || '').toUpperCase()}` : request.urgency}</span>
+                                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                  request.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                  request.status === 'accepted' ? 'bg-green-100 text-green-800' :
+                                  request.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                                  'bg-gray-100 text-gray-800'
+                                }`}>{request.status}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-gray-600">Location:</span>

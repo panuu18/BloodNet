@@ -42,7 +42,7 @@ const requestSchema = new mongoose.Schema({
   },
   urgency: {
     type: String,
-    enum: ['normal', 'urgent', 'emergency', 'critical'],
+    enum: ['normal', 'urgent', 'emergency', 'critical', 'routine'],
     default: 'normal'
   },
   unitsNeeded: {
