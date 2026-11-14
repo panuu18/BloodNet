@@ -25,6 +25,26 @@ import {
 } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartSolidIcon } from '@heroicons/react/24/solid';
 
+const ALL_BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+
+const formatRelativeTime = (timestamp) => {
+  if (!timestamp) return 'Just now';
+  const date = new Date(timestamp);
+  if (isNaN(date.getTime())) return 'Recently';
+
+  const now = new Date();
+  const diffInSeconds = Math.floor((now - date) / 1000);
+
+  if (diffInSeconds < 60) return 'Just now';
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) return `${diffInHours}h ago`;
+  const diffInDays = Math.floor(diffInHours / 24);
+  if (diffInDays < 7) return `${diffInDays}d ago`;
+  return date.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+};
+
 const MobileHospitalDashboard = () => {
   const { user } = useAuth();
   const { notifications } = useNotifications();
@@ -314,46 +334,181 @@ const MobileHospitalDashboard = () => {
               </motion.div>
             )}
 
-            {/* Recent Requests Preview */}
+            {/* Inventory Summary Mobile Panel */}
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center space-x-2">
+                  <div className="p-1.5 bg-emerald-100 text-emerald-600 rounded-lg">
+                    <HeartIcon className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-bold text-gray-900">Inventory Summary</h2>
+                    <p className="text-[11px] text-gray-500">
+                      {stats?.totalBloodUnits ?? inventory.reduce((s, i) => s + (i.unitsAvailable || 0), 0)} Total Units
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActiveSection('inventory')}
+                  className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+                >
+                  Manage Stock →
+                </button>
+              </div>
+
+              {/* 8 Blood Groups Grid */}
+              <div className="grid grid-cols-4 gap-2">
+                {ALL_BLOOD_GROUPS.map((group) => {
+                  const item = inventory.find(i => i.bloodGroup === group) || {
+                    bloodGroup: group,
+                    unitsAvailable: 0,
+                    minThreshold: 5
+                  };
+                  const units = item.unitsAvailable || 0;
+                  const min = item.minThreshold || 5;
+                  const isOutOfStock = units === 0;
+                  const isCritical = units > 0 && units <= Math.floor(min / 2);
+                  const isLow = units > Math.floor(min / 2) && units <= min;
+
+                  return (
+                    <div
+                      key={group}
+                      onClick={() => setActiveSection('inventory')}
+                      className={`p-2 rounded-lg border text-center cursor-pointer transition-all ${
+                        isOutOfStock
+                          ? 'bg-red-50/80 border-red-200'
+                          : isCritical
+                          ? 'bg-rose-50/80 border-rose-200'
+                          : isLow
+                          ? 'bg-amber-50/80 border-amber-200'
+                          : 'bg-emerald-50/50 border-emerald-100'
+                      }`}
+                    >
+                      <p className={`text-xs font-extrabold ${
+                        isOutOfStock || isCritical ? 'text-red-700' : isLow ? 'text-amber-700' : 'text-gray-900'
+                      }`}>
+                        {group}
+                      </p>
+                      <p className="text-sm font-bold text-gray-900 mt-0.5">{units}</p>
+                      <span className={`inline-block text-[9px] px-1 py-0.2 rounded font-semibold uppercase ${
+                        isOutOfStock
+                          ? 'text-red-700 bg-red-100'
+                          : isCritical
+                          ? 'text-rose-700 bg-rose-100'
+                          : isLow
+                          ? 'text-amber-700 bg-amber-100'
+                          : 'text-emerald-700 bg-emerald-100'
+                      }`}>
+                        {isOutOfStock ? 'Empty' : isCritical ? 'Crit' : isLow ? 'Low' : 'Good'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Recent Requests Mobile Panel */}
             <div>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">Recent Requests</h2>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center space-x-2">
+                  <div className="p-1.5 bg-blue-100 text-blue-600 rounded-lg">
+                    <ClockIcon className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-bold text-gray-900">Recent Requests</h2>
+                    <p className="text-[11px] text-gray-500">
+                      {bloodRequests.filter(r => r.status === 'pending' || r.status === 'active').length} Active Requests
+                    </p>
+                  </div>
+                </div>
                 <button
                   onClick={() => setActiveSection('requests')}
-                  className="text-sm text-red-600 hover:text-red-700"
+                  className="text-xs font-semibold text-blue-600 hover:text-blue-700"
                 >
                   View All →
                 </button>
               </div>
-              <div className="space-y-3">
-                {filteredRequests.slice(0, 3).map((request) => (
-                  <motion.div
-                    key={request._id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="bg-white rounded-xl p-4 shadow-sm border border-gray-200"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <p className="font-semibold text-gray-900">{request.recipientName}</p>
-                        <div className="flex items-center space-x-2 mt-1">
-                          <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-600">
-                            {request.bloodGroup}
-                          </span>
-                          <span className="text-sm text-gray-600">{request.unitsNeeded} units</span>
-                        </div>
-                        <p className="text-sm text-gray-500 mt-2">{request.location?.address}</p>
-                      </div>
-                      <button
-                        onClick={() => setActiveSection('requests')}
-                        className="px-3 py-1 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700"
+
+              {bloodRequests.length > 0 ? (
+                <div className="space-y-3">
+                  {bloodRequests.slice(0, 4).map((request) => {
+                    const matchedStock = inventory.find(i => i.bloodGroup === request.bloodGroup);
+                    const availableUnits = matchedStock ? (matchedStock.unitsAvailable || 0) : 0;
+                    const hasEnoughStock = availableUnits >= (request.unitsNeeded || 1);
+
+                    return (
+                      <motion.div
+                        key={request._id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-white rounded-xl p-3.5 shadow-sm border border-gray-200"
                       >
-                        Respond
-                      </button>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
+                        <div className="flex items-start justify-between gap-2">
+                          {/* Blood Tag & Details */}
+                          <div className="flex items-start space-x-2.5 flex-1 min-w-0">
+                            <div className="w-10 h-10 rounded-lg bg-red-600 text-white font-bold flex flex-col items-center justify-center flex-shrink-0 shadow-sm">
+                              <span className="text-xs font-extrabold leading-none">{request.bloodGroup}</span>
+                              <span className="text-[8px] uppercase tracking-tighter opacity-80 mt-0.5">Blood</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center space-x-1.5 flex-wrap">
+                                <p className="font-semibold text-gray-900 text-sm truncate">
+                                  {request.recipientName || 'Emergency Patient'}
+                                </p>
+                                <span className={`px-1.5 py-0.2 text-[9px] font-bold rounded uppercase ${
+                                  request.urgency === 'critical' || request.urgency === 'emergency'
+                                    ? 'bg-red-100 text-red-700'
+                                    : request.urgency === 'urgent'
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : 'bg-blue-100 text-blue-700'
+                                }`}>
+                                  {request.urgency === 'critical' ? '🚨 Critical' : request.urgency === 'urgent' ? '⚡ Urgent' : 'Normal'}
+                                </span>
+                              </div>
+                              <p className="text-xs text-gray-600 mt-0.5">
+                                <span className="font-medium text-gray-800">{request.unitsNeeded} units</span> • {formatRelativeTime(request.createdAt)}
+                              </p>
+                              {/* Stock status tag */}
+                              <p className={`text-[10px] mt-1 font-medium ${
+                                hasEnoughStock ? 'text-emerald-700' : 'text-red-700'
+                              }`}>
+                                {hasEnoughStock ? `✓ Ready in stock (${availableUnits} avail)` : `⚠ Insufficient stock (${availableUnits} / ${request.unitsNeeded})`}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Action Button */}
+                          <div className="flex flex-col items-end space-y-1 flex-shrink-0">
+                            <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full capitalize ${
+                              request.status === 'pending'
+                                ? 'bg-amber-100 text-amber-800'
+                                : request.status === 'accepted'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-gray-100 text-gray-700'
+                            }`}>
+                              {request.status}
+                            </span>
+                            <button
+                              onClick={() => setActiveSection('requests')}
+                              className="px-2.5 py-1 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700 transition-colors shadow-xs"
+                            >
+                              Respond
+                            </button>
+                          </div>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="bg-white rounded-xl p-6 text-center border border-gray-200">
+                  <ClockIcon className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-xs font-semibold text-gray-800">No Recent Requests</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5">
+                    Incoming patient requests will appear here in real-time.
+                  </p>
+                </div>
+              )}
             </div>
           </motion.div>
         )}

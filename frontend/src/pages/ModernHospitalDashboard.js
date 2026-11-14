@@ -34,6 +34,26 @@ import {
 } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartSolidIcon } from '@heroicons/react/24/solid';
 
+const ALL_BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+
+const formatRelativeTime = (timestamp) => {
+  if (!timestamp) return 'Just now';
+  const date = new Date(timestamp);
+  if (isNaN(date.getTime())) return 'Recently';
+
+  const now = new Date();
+  const diffInSeconds = Math.floor((now - date) / 1000);
+
+  if (diffInSeconds < 60) return 'Just now';
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) return `${diffInHours}h ago`;
+  const diffInDays = Math.floor(diffInHours / 24);
+  if (diffInDays < 7) return `${diffInDays}d ago`;
+  return date.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+};
+
 const ModernHospitalDashboard = () => {
   const { user } = useAuth();
   const { notifications, newBloodRequest, showNotification } = useNotifications();
@@ -686,166 +706,290 @@ const ModernHospitalDashboard = () => {
               </div>
             </motion.div>
 
-            {/* Recent Activity */}
-            <div className="grid lg:grid-cols-2 gap-8">
-              {/* Recent Requests Card Button */}
+            {/* Recent Requests & Inventory Summary Overview Panels */}
+            <div className="grid lg:grid-cols-2 gap-8 items-start">
+              {/* Recent Requests Panel */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.5 }}
-                className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 text-white cursor-pointer shadow-lg hover:shadow-xl transition-all"
-                onClick={() => setShowRecentRequests(!showRecentRequests)}
+                className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col"
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <ClockIcon className="h-8 w-8 mr-3" />
+                {/* Header */}
+                <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-blue-50/60 via-white to-transparent">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2.5 bg-blue-100 text-blue-600 rounded-xl shadow-sm">
+                      <ClockIcon className="h-6 w-6" />
+                    </div>
                     <div>
-                      <h3 className="text-xl font-bold">Recent Requests</h3>
-                      <p className="text-blue-100">{bloodRequests.slice(0, 5).length} pending requests</p>
+                      <div className="flex items-center space-x-2">
+                        <h3 className="text-lg font-bold text-gray-900">Recent Requests</h3>
+                        <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-blue-100 text-blue-700">
+                          {bloodRequests.filter(r => r.status === 'pending' || r.status === 'active').length} Active
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5">Latest blood requests requiring attention</p>
                     </div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="bg-white bg-opacity-20 rounded-full px-3 py-1">
-                      <span className="font-semibold">{bloodRequests.filter(r => r.status === 'pending').length}</span>
+                  <button
+                    onClick={() => setActiveSection('requests')}
+                    className="text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline flex items-center space-x-1"
+                  >
+                    <span>View All</span>
+                    <span aria-hidden="true">&rarr;</span>
+                  </button>
+                </div>
+
+                {/* Content */}
+                <div className="p-5 flex-1 flex flex-col justify-between">
+                  {bloodRequests.length > 0 ? (
+                    <div className="space-y-3">
+                      {bloodRequests.slice(0, 5).map((request) => {
+                        const matchedStock = inventory.find(i => i.bloodGroup === request.bloodGroup);
+                        const availableUnits = matchedStock ? (matchedStock.unitsAvailable || 0) : 0;
+                        const hasEnoughStock = availableUnits >= (request.unitsNeeded || 1);
+
+                        return (
+                          <div
+                            key={request._id}
+                            className="p-3.5 bg-gray-50/80 hover:bg-blue-50/40 rounded-xl border border-gray-200/70 transition-all flex items-center justify-between gap-3"
+                          >
+                            {/* Left: Blood Group Badge & Details */}
+                            <div className="flex items-center space-x-3 min-w-0">
+                              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-500 to-rose-600 text-white font-extrabold flex flex-col items-center justify-center shadow-sm flex-shrink-0">
+                                <span className="text-sm leading-none font-black">{request.bloodGroup}</span>
+                                <span className="text-[9px] uppercase tracking-wider opacity-80 mt-0.5 font-medium">Blood</span>
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center space-x-2 flex-wrap">
+                                  <p className="font-semibold text-gray-900 truncate text-sm">
+                                    {request.recipientName || 'Emergency Patient'}
+                                  </p>
+                                  {/* Urgency Badge */}
+                                  <span className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-md ${
+                                    request.urgency === 'critical' || request.urgency === 'emergency'
+                                      ? 'bg-red-100 text-red-700 animate-pulse'
+                                      : request.urgency === 'urgent'
+                                      ? 'bg-amber-100 text-amber-800'
+                                      : 'bg-blue-100 text-blue-700'
+                                  }`}>
+                                    {request.urgency === 'critical' ? '🚨 Critical' : request.urgency === 'urgent' ? '⚡ Urgent' : 'Normal'}
+                                  </span>
+                                </div>
+                                <div className="flex items-center space-x-2 mt-1 text-xs text-gray-600">
+                                  <span className="font-medium text-gray-800">{request.unitsNeeded || 1} units needed</span>
+                                  <span>•</span>
+                                  <span className="text-gray-400">{formatRelativeTime(request.createdAt)}</span>
+                                </div>
+                                {/* Live Stock Availability Status */}
+                                <div className="mt-1 flex items-center text-[11px]">
+                                  {hasEnoughStock ? (
+                                    <span className="text-emerald-700 font-medium flex items-center gap-1">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                      Stock ready ({availableUnits} units available)
+                                    </span>
+                                  ) : (
+                                    <span className="text-red-700 font-medium flex items-center gap-1">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                                      Insufficient ({availableUnits} / {request.unitsNeeded} units available)
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Right: Status Tag & Action */}
+                            <div className="flex flex-col items-end space-y-1.5 flex-shrink-0">
+                              <span className={`px-2.5 py-1 text-xs font-semibold rounded-full capitalize ${
+                                request.status === 'pending'
+                                  ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                  : request.status === 'accepted'
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                  : request.status === 'fulfilled'
+                                  ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                  : 'bg-gray-100 text-gray-700 border border-gray-200'
+                              }`}>
+                                {request.status}
+                              </span>
+                              {request.status === 'pending' && (
+                                <button
+                                  onClick={() => setActiveSection('requests')}
+                                  className="text-xs text-blue-600 hover:text-blue-800 font-semibold hover:underline"
+                                >
+                                  Respond &rarr;
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                    <motion.div
-                      animate={{ rotate: showRecentRequests ? 180 : 0 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      <ChevronDownIcon className="h-6 w-6" />
-                    </motion.div>
+                  ) : (
+                    <div className="text-center py-10 px-4">
+                      <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center">
+                        <ClockIcon className="h-7 w-7 opacity-80" />
+                      </div>
+                      <h4 className="text-sm font-semibold text-gray-900">No Recent Requests</h4>
+                      <p className="text-xs text-gray-500 max-w-xs mx-auto mt-1">
+                        When donors or patients request blood from your hospital, they will appear here in real time.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Footer */}
+                  <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+                    <span>Total requests logged: <strong className="text-gray-800">{bloodRequests.length}</strong></span>
+                    <span>Handled today: <strong className="text-gray-800">{stats?.requestsHandledToday ?? 0}</strong></span>
                   </div>
                 </div>
               </motion.div>
 
-              {/* Collapsible Recent Requests Content */}
-              <AnimatePresence>
-                {showRecentRequests && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="overflow-hidden"
-                  >
-                    <motion.div
-                      initial={{ y: -20 }}
-                      animate={{ y: 0 }}
-                      exit={{ y: -20 }}
-                      className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 mt-4"
-                    >
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-semibold text-gray-900">Recent Requests</h3>
-                        <div className="flex items-center text-sm text-gray-500">
-                          <ClockIcon className="h-4 w-4 mr-1" />
-                          Last 24 hours
-                        </div>
-                      </div>
-                      <div className="space-y-3">
-                        {bloodRequests.slice(0, 5).map((request) => (
-                          <div key={request._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                            <div className="flex items-center space-x-3">
-                              <div className={`w-2 h-2 rounded-full ${
-                                request.status === 'pending' ? 'bg-yellow-500' :
-                                request.status === 'accepted' ? 'bg-green-500' :
-                                'bg-red-500'
-                              }`}></div>
-                              <div>
-                                <p className="font-medium text-gray-900">{request.recipientName}</p>
-                                <p className="text-sm text-gray-600">{request.bloodGroup} • {request.unitsNeeded} units</p>
-                                <p className="text-xs text-gray-500 italic">Urgency: {request.urgency}</p>
-                              </div>
-                            </div>
-                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                              request.status === 'pending' ? 'bg-yellow-100 text-yellow-600' :
-                              request.status === 'accepted' ? 'bg-green-100 text-green-600' :
-                              'bg-red-100 text-red-600'
-                            }`}>
-                              {request.status}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </motion.div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Inventory Summary Card Button */}
+              {/* Inventory Summary Panel */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.6 }}
-                className="bg-gradient-to-r from-green-500 to-green-600 rounded-xl p-6 text-white cursor-pointer shadow-lg hover:shadow-xl transition-all"
-                onClick={() => setShowInventorySummary(!showInventorySummary)}
+                className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col"
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <HeartIcon className="h-8 w-8 mr-3" />
+                {/* Header */}
+                <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-emerald-50/60 via-white to-transparent">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2.5 bg-emerald-100 text-emerald-600 rounded-xl shadow-sm">
+                      <HeartIcon className="h-6 w-6" />
+                    </div>
                     <div>
-                      <h3 className="text-xl font-bold">Inventory Summary</h3>
-                      <p className="text-green-100">{inventory.length} blood types available</p>
+                      <div className="flex items-center space-x-2">
+                        <h3 className="text-lg font-bold text-gray-900">Inventory Summary</h3>
+                        <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-700">
+                          {stats?.totalBloodUnits ?? inventory.reduce((s, i) => s + (i.unitsAvailable || 0), 0)} Units Ready
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5">Live stock across all 8 standard blood groups</p>
                     </div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="bg-white bg-opacity-20 rounded-full px-3 py-1">
-                      <span className="font-semibold">{inventory.reduce((sum, item) => sum + item.unitsAvailable, 0)}</span>
-                    </div>
-                    <motion.div
-                      animate={{ rotate: showInventorySummary ? 180 : 0 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      <ChevronDownIcon className="h-6 w-6" />
-                    </motion.div>
+                  <button
+                    onClick={() => setActiveSection('inventory')}
+                    className="text-sm font-semibold text-emerald-600 hover:text-emerald-700 hover:underline flex items-center space-x-1"
+                  >
+                    <span>Manage Stock</span>
+                    <span aria-hidden="true">&rarr;</span>
+                  </button>
+                </div>
+
+                {/* Content - 8 Blood Groups Grid */}
+                <div className="p-5 flex-1 flex flex-col justify-between">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {ALL_BLOOD_GROUPS.map((group) => {
+                      const item = inventory.find(i => i.bloodGroup === group) || {
+                        bloodGroup: group,
+                        unitsAvailable: 0,
+                        minThreshold: 5,
+                        maxCapacity: 50
+                      };
+                      const units = item.unitsAvailable || 0;
+                      const min = item.minThreshold || 5;
+                      const isOutOfStock = units === 0;
+                      const isCritical = units > 0 && units <= Math.floor(min / 2);
+                      const isLow = units > Math.floor(min / 2) && units <= min;
+
+                      // Fill percentage relative to 2x threshold
+                      const fillPercent = Math.min(100, Math.round((units / (min * 2)) * 100));
+
+                      return (
+                        <div
+                          key={group}
+                          className={`p-3 rounded-xl border transition-all flex flex-col justify-between ${
+                            isOutOfStock
+                              ? 'bg-red-50/70 border-red-200'
+                              : isCritical
+                              ? 'bg-rose-50/70 border-rose-200'
+                              : isLow
+                              ? 'bg-amber-50/70 border-amber-200'
+                              : 'bg-emerald-50/40 border-emerald-100'
+                          }`}
+                        >
+                          {/* Top: Blood Group & Status */}
+                          <div className="flex items-center justify-between mb-2">
+                            <span className={`text-base font-extrabold ${
+                              isOutOfStock || isCritical ? 'text-red-700' : isLow ? 'text-amber-700' : 'text-gray-900'
+                            }`}>
+                              {group}
+                            </span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ${
+                              isOutOfStock
+                                ? 'bg-red-200 text-red-800'
+                                : isCritical
+                                ? 'bg-rose-200 text-rose-800'
+                                : isLow
+                                ? 'bg-amber-200 text-amber-800'
+                                : 'bg-emerald-100 text-emerald-800'
+                            }`}>
+                              {isOutOfStock ? 'Empty' : isCritical ? 'Critical' : isLow ? 'Low' : 'Good'}
+                            </span>
+                          </div>
+
+                          {/* Middle: Units & Progress Bar */}
+                          <div>
+                            <div className="flex items-baseline space-x-1 mb-1">
+                              <span className="text-xl font-bold text-gray-900">{units}</span>
+                              <span className="text-xs text-gray-500">units</span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                              <div
+                                className={`h-1.5 rounded-full transition-all duration-500 ${
+                                  isOutOfStock
+                                    ? 'bg-red-500'
+                                    : isCritical
+                                    ? 'bg-rose-500'
+                                    : isLow
+                                    ? 'bg-amber-500'
+                                    : 'bg-emerald-500'
+                                }`}
+                                style={{ width: `${Math.max(units > 0 ? 8 : 0, fillPercent)}%` }}
+                              ></div>
+                            </div>
+                            <p className="text-[10px] text-gray-500 mt-1 flex justify-between">
+                              <span>Min: {min}</span>
+                              <span className="text-gray-400">Opt: {min * 2}</span>
+                            </p>
+                          </div>
+
+                          {/* Update Button */}
+                          <button
+                            onClick={() => {
+                              setEditingInventory(item);
+                              setShowInventoryModal(true);
+                            }}
+                            className="mt-2.5 pt-2 border-t border-gray-200/60 text-[11px] font-semibold text-gray-700 hover:text-emerald-700 text-center w-full transition-colors"
+                          >
+                            + Update
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Footer */}
+                  <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+                    <span>
+                      Safe stock: <strong className="text-emerald-700">
+                        {ALL_BLOOD_GROUPS.filter(g => {
+                          const it = inventory.find(i => i.bloodGroup === g);
+                          return (it?.unitsAvailable || 0) > (it?.minThreshold || 5);
+                        }).length}/8
+                      </strong>
+                    </span>
+                    <span>
+                      Attention needed: <strong className="text-red-600">
+                        {ALL_BLOOD_GROUPS.filter(g => {
+                          const it = inventory.find(i => i.bloodGroup === g);
+                          return (it?.unitsAvailable || 0) <= (it?.minThreshold || 5);
+                        }).length}/8
+                      </strong>
+                    </span>
                   </div>
                 </div>
               </motion.div>
-
-              {/* Collapsible Inventory Summary Content */}
-              <AnimatePresence>
-                {showInventorySummary && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="overflow-hidden"
-                  >
-                    <motion.div
-                      initial={{ y: -20 }}
-                      animate={{ y: 0 }}
-                      exit={{ y: -20 }}
-                      className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 mt-4"
-                    >
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-semibold text-gray-900">Inventory Summary</h3>
-                        <div className="flex items-center text-sm text-gray-500">
-                          <HeartIcon className="h-4 w-4 mr-1" />
-                          Life-saving units ready
-                        </div>
-                      </div>
-                      <div className="space-y-3">
-                        {inventory.slice(0, 5).map((item) => {
-                          const status = getStockStatusColor(item.unitsAvailable, item.minThreshold, item.maxCapacity);
-                          return (
-                            <div key={item.bloodGroup} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                              <div className="flex items-center space-x-3">
-                                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${status.bg} ${status.text}`}>
-                                  {item.bloodGroup}
-                                </div>
-                                <span className="font-medium text-gray-900">{item.unitsAvailable} units</span>
-                              </div>
-                              <span className={`text-xs px-2 py-1 rounded-full ${status.bg} ${status.text}`}>
-                                {getStockStatusText(item.unitsAvailable, item.minThreshold, item.maxCapacity).text}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </motion.div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
             </div>
           </motion.div>
         )}
