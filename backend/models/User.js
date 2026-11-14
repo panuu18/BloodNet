@@ -7,17 +7,28 @@ const userSchema = new mongoose.Schema({
     enum: ['recipient', 'donor', 'hospital', 'admin'],
     required: true
   },
+  firstName: {
+    type: String,
+    trim: true
+  },
+  lastName: {
+    type: String,
+    trim: true
+  },
   name: {
-    type: String
+    type: String,
+    trim: true
   },
   hospitalName: {
-    type: String
+    type: String,
+    trim: true
   },
   email: {
     type: String,
     required: true,
     unique: true,
-    lowercase: true
+    lowercase: true,
+    trim: true
   },
   password: {
     type: String,
@@ -26,10 +37,16 @@ const userSchema = new mongoose.Schema({
   },
   phone: {
     type: String,
-    required: true
+    required: true,
+    trim: true
   },
   contactNumber: {
-    type: String
+    type: String,
+    trim: true
+  },
+  emergencyContact: {
+    type: String,
+    trim: true
   },
   bloodGroup: {
     type: String,
@@ -38,11 +55,21 @@ const userSchema = new mongoose.Schema({
   location: {
     lat: {
       type: Number,
-      required: true
+      default: 0
     },
     lng: {
       type: Number,
-      required: true
+      default: 0
+    },
+    address: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    city: {
+      type: String,
+      default: '',
+      trim: true
     }
   },
   donorHealthDetails: {
@@ -52,7 +79,7 @@ const userSchema = new mongoose.Schema({
     },
     hemoglobin: {
       type: Number,
-      min: 11
+      min: 13
     },
     age: {
       type: Number,
@@ -67,7 +94,7 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
-    status: {
+  status: {
     type: String,
     enum: ['active', 'inactive', 'suspended', 'pending'],
     default: 'active'
@@ -75,6 +102,23 @@ const userSchema = new mongoose.Schema({
   verified: {
     type: Boolean,
     default: true
+  },
+  resetPasswordToken: {
+    type: String
+  },
+  resetPasswordExpire: {
+    type: Date
+  },
+  termsConsent: {
+    type: Boolean,
+    default: true
+  },
+  emailVerified: {
+    type: Boolean,
+    default: true
+  },
+  emailVerificationToken: {
+    type: String
   },
   certificates: [{
     type: mongoose.Schema.Types.ObjectId,
@@ -84,8 +128,6 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Password hashing will be done in the controller
-
 userSchema.methods.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
@@ -93,6 +135,9 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
 userSchema.methods.toJSON = function() {
   const user = this.toObject();
   delete user.password;
+  delete user.resetPasswordToken;
+  delete user.resetPasswordExpire;
+  delete user.emailVerificationToken;
   return user;
 };
 
