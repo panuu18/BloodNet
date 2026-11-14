@@ -249,18 +249,19 @@ const MobileHospitalDashboard = () => {
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Overview</h2>
               <div className="flex space-x-4 overflow-x-auto pb-2">
                 {[
-                  { label: 'Total Blood', value: stats?.totalBloodUnits ?? inventory.reduce((s, i) => s + (i.unitsAvailable || 0), 0), icon: '🩸', color: 'red' },
-                  { label: 'Active Requests', value: stats?.activeRequests ?? bloodRequests.filter(r => r.status === 'pending' || r.status === 'active').length, icon: '📩', color: 'blue' },
-                  { label: 'Handled Today', value: stats?.requestsHandledToday ?? 0, icon: '✅', color: 'green' },
-                  { label: 'Critical Stock', value: getCriticalStockAlerts().length, icon: '🚨', color: 'red' },
-                  { label: 'Low Stock', value: getLowStockAlerts().length, icon: '⚠️', color: 'yellow' }
+                  { label: 'Total Blood', value: stats?.totalBloodUnits ?? inventory.reduce((s, i) => s + (i.unitsAvailable || 0), 0), icon: '🩸', color: 'red', onClick: () => setActiveSection('inventory') },
+                  { label: 'Active Requests', value: stats?.activeRequests ?? bloodRequests.filter(r => r.status === 'pending' || r.status === 'active').length, icon: '📩', color: 'blue', onClick: () => setActiveSection('requests') },
+                  { label: 'Handled Today', value: stats?.requestsHandledToday ?? 0, icon: '✅', color: 'green', onClick: () => setActiveSection('requests') },
+                  { label: 'Critical Stock', value: getCriticalStockAlerts().length, icon: '🚨', color: 'red', onClick: () => setActiveSection('inventory') },
+                  { label: 'Low Stock', value: getLowStockAlerts().length, icon: '⚠️', color: 'yellow', onClick: () => setActiveSection('inventory') }
                 ].map((stat, index) => (
                   <motion.div
                     key={index}
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.1 }}
-                    className="flex-shrink-0 w-36 bg-white rounded-xl p-4 shadow-sm border border-gray-200"
+                    onClick={stat.onClick}
+                    className="flex-shrink-0 w-36 bg-white rounded-xl p-4 shadow-sm border border-gray-200 cursor-pointer active:scale-95 transition-transform"
                   >
                     <div className="text-center">
                       <div className="text-2xl mb-2">{stat.icon}</div>

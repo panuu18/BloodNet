@@ -376,6 +376,7 @@ const getHospitalStats = async (req, res) => {
       stats: {
         totalBloodUnits,
         activeRequests,
+        pendingRequests: activeRequests,
         requestsHandledToday,
         lowStockCount: lowStockItems.length,
         criticalStockCount: criticalStockItems.length,

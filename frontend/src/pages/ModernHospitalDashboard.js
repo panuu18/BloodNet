@@ -266,12 +266,13 @@ const ModernHospitalDashboard = () => {
 
       // Summary sheet
       const summaryData = [
-        { 'Metric': 'Total Blood Units', 'Value': stats?.totalBloodUnits || 0 },
-        { 'Metric': 'Active Requests', 'Value': stats?.pendingRequests || 0 },
-        { 'Metric': 'Requests Handled Today', 'Value': stats?.completedRequests || 0 },
+        { 'Metric': 'Total Blood Units', 'Value': stats?.totalBloodUnits ?? inventory.reduce((s, i) => s + (i.unitsAvailable || 0), 0) },
+        { 'Metric': 'Active Requests', 'Value': stats?.activeRequests ?? stats?.pendingRequests ?? bloodRequests.filter(r => r.status === 'pending' || r.status === 'active').length },
+        { 'Metric': 'Requests Handled Today', 'Value': stats?.requestsHandledToday ?? stats?.completedRequests ?? 0 },
+        { 'Metric': 'Critical Stock Alerts', 'Value': getCriticalStockAlerts().length },
         { 'Metric': 'Low Stock Alerts', 'Value': getLowStockAlerts().length },
-        { 'Metric': 'Hospital Name', 'Value': reportData.hospitalName },
-        { 'Metric': 'Report Generated', 'Value': reportData.generatedDate }
+        { 'Metric': 'Hospital Name', 'Value': reportData.hospitalName || user?.hospitalName || 'Hospital' },
+        { 'Metric': 'Report Generated', 'Value': new Date().toLocaleString('en-IN') }
       ];
       const wsSummary = XLSX.utils.json_to_sheet(summaryData);
       XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
@@ -314,10 +315,19 @@ const ModernHospitalDashboard = () => {
     return matchesSearch;
   });
 
+  const getCriticalStockAlerts = () => {
+    return inventory.filter(item => {
+      const min = item.minThreshold || 5;
+      const units = item.unitsAvailable || 0;
+      return units === 0 || units <= Math.floor(min / 2);
+    });
+  };
+
   const getLowStockAlerts = () => {
     return inventory.filter(item => {
-      const status = getStockStatusText(item.unitsAvailable, item.minThreshold, item.maxCapacity);
-      return status.level === 'critical' || status.level === 'warning';
+      const min = item.minThreshold || 5;
+      const units = item.unitsAvailable || 0;
+      return units > Math.floor(min / 2) && units <= min;
     });
   };
 
@@ -546,35 +556,49 @@ const ModernHospitalDashboard = () => {
               {[
                 { 
                   label: 'Total Blood Units', 
-                  value: stats?.totalBloodUnits || 0, 
+                  value: stats?.totalBloodUnits ?? inventory.reduce((sum, item) => sum + (item.unitsAvailable || 0), 0), 
                   icon: <HeartSolidIcon className="h-6 w-6" />, 
-                  color: 'red', 
-                  change: '+12%',
-                  caption: 'Ready to save lives'
+                  badgeBg: 'bg-red-100 text-red-600', 
+                  badgeBorder: 'group-hover:border-red-300',
+                  change: `${ALL_BLOOD_GROUPS.filter(g => (inventory.find(i => i.bloodGroup === g)?.unitsAvailable || 0) > 0).length} of 8 types in stock`,
+                  caption: 'Click to manage inventory',
+                  onClick: () => setActiveSection('inventory')
                 },
                 { 
                   label: 'Active Requests', 
-                  value: stats?.pendingRequests || 0, 
-                  icon: <ExclamationTriangleIcon className="h-6 w-6" />, 
-                  color: 'orange', 
-                  change: '+5%',
-                  caption: 'Patients waiting for help'
+                  value: stats?.activeRequests ?? stats?.pendingRequests ?? bloodRequests.filter(r => r.status === 'pending' || r.status === 'active').length, 
+                  icon: <ClockIcon className="h-6 w-6" />, 
+                  badgeBg: 'bg-blue-100 text-blue-600', 
+                  badgeBorder: 'group-hover:border-blue-300',
+                  change: bloodRequests.filter(r => (r.status === 'pending' || r.status === 'active') && (r.urgency === 'critical' || r.urgency === 'emergency')).length > 0 
+                    ? `🚨 ${bloodRequests.filter(r => (r.status === 'pending' || r.status === 'active') && (r.urgency === 'critical' || r.urgency === 'emergency')).length} Critical Urgency`
+                    : `${bloodRequests.filter(r => r.status === 'pending').length} Awaiting Response`,
+                  caption: 'Click to view & respond',
+                  onClick: () => setActiveSection('requests')
                 },
                 { 
                   label: 'Requests Handled Today', 
-                  value: stats?.completedRequests || 0, 
+                  value: stats?.requestsHandledToday ?? stats?.completedRequests ?? 0, 
                   icon: <CheckCircleIcon className="h-6 w-6" />, 
-                  color: 'green', 
-                  change: '+18%',
-                  caption: 'Lives impacted today'
+                  badgeBg: 'bg-emerald-100 text-emerald-600', 
+                  badgeBorder: 'group-hover:border-emerald-300',
+                  change: 'Processed today (IST)',
+                  caption: 'Accepted & fulfilled requests',
+                  onClick: () => setActiveSection('history')
                 },
                 { 
-                  label: 'Low Stock Alerts', 
-                  value: getLowStockAlerts().length, 
-                  icon: <BellIcon className="h-6 w-6" />, 
-                  color: 'yellow', 
-                  change: '-2%',
-                  caption: 'Needs attention'
+                  label: 'Stock Alerts', 
+                  value: getCriticalStockAlerts().length + getLowStockAlerts().length, 
+                  icon: <ExclamationTriangleIcon className="h-6 w-6" />, 
+                  badgeBg: 'bg-amber-100 text-amber-600', 
+                  badgeBorder: 'group-hover:border-amber-300',
+                  change: getCriticalStockAlerts().length > 0 
+                    ? `🚨 ${getCriticalStockAlerts().length} Critical • ${getLowStockAlerts().length} Low` 
+                    : getLowStockAlerts().length > 0 
+                    ? `⚠️ ${getLowStockAlerts().length} Low Stock` 
+                    : '✓ All stock normal',
+                  caption: 'Click to inspect alerts',
+                  onClick: () => setActiveSection('inventory')
                 }
               ].map((stat, index) => (
                 <motion.div
@@ -582,16 +606,20 @@ const ModernHospitalDashboard = () => {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.5, delay: index * 0.1 }}
-                  className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 hover:shadow-md transition-shadow"
+                  onClick={stat.onClick}
+                  className={`bg-white rounded-xl shadow-sm p-6 border border-gray-200 hover:shadow-md ${stat.badgeBorder} transition-all cursor-pointer group`}
                 >
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-gray-600">{stat.label}</p>
-                      <p className="text-2xl font-bold text-gray-900 mt-1">{stat.value}</p>
-                      <p className="text-xs text-green-600 mt-1">{stat.change} from yesterday</p>
-                      <p className="text-xs text-gray-500 mt-1 italic">{stat.caption}</p>
+                      <p className="text-sm font-medium text-gray-600 group-hover:text-gray-900 transition-colors">{stat.label}</p>
+                      <p className="text-3xl font-extrabold text-gray-900 mt-1">{stat.value}</p>
+                      <p className="text-xs font-semibold text-gray-700 mt-1 flex items-center gap-1">{stat.change}</p>
+                      <p className="text-xs text-gray-400 mt-0.5 group-hover:text-gray-600 transition-colors flex items-center gap-1">
+                        <span>{stat.caption}</span>
+                        <span className="opacity-0 group-hover:opacity-100 transition-opacity text-blue-600 font-bold">&rarr;</span>
+                      </p>
                     </div>
-                    <div className={`p-3 rounded-lg bg-${stat.color}-100 text-${stat.color}-600`}>
+                    <div className={`p-3 rounded-xl ${stat.badgeBg} group-hover:scale-110 transition-transform shadow-xs`}>
                       {stat.icon}
                     </div>
                   </div>
